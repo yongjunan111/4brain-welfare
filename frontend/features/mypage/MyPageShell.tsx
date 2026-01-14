@@ -13,7 +13,7 @@ function SideItem({ href, label }: { href: string; label: string }) {
             href={href}
             className={[
                 "flex items-center justify-between rounded-lg px-4 py-3 text-sm transition-colors",
-                active ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-800 hover:bg-gray-50",
+                active ? "bg-blue-50 text-blue-800 font-semibold" : "text-gray-800 hover:bg-gray-50",
             ].join(" ")}
         >
             <span>{label}</span>
@@ -38,11 +38,11 @@ export function MyPageShell({ children }: { children: React.ReactNode }) {
                 */}
                 <aside
                     className={[
-                        "h-[calc(100vh-4rem)] overflow-hidden rounded-2xl border bg-white",
+                        "h-[calc(100vh-20rem)] min-h-[450px] overflow-hidden rounded-2xl border bg-white",
                         // "w-full",                // 모바일: 전체폭
                         "shrink-0",              // ✅ 찌그러짐 방지
                         "md:sticky md:top-6",
-                        "md:w-[280px] md:max-w-[280px]", // ✅ PC: 고정폭(둘 다)
+                        "md:w-[260px] md:max-w-[260px]", // ✅ PC: 고정폭(둘 다)
                     ].join(" ")}
                 >
                     <div className="h-36 bg-gradient-to-br from-purple-100 via-indigo-100 to-pink-100 p-6">

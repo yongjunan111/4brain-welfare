@@ -29,3 +29,6 @@ export type Policy = {
   bizPrdBgngYmd?: string;    // "20260220"
   bizPrdEndYmd?: string;     // "20261231"
 };
+
+// ✅ 카드(UI)에 필요한 최소 필드만 뽑은 타입
+export type PolicyCardItem = Pick<Policy, "id" | "title" | "summary" | "region">;

@@ -86,7 +86,7 @@ function Chip({
             className={[
                 "h-11 rounded-lg border px-4 text-sm transition",
                 active
-                    ? "border-blue-600 bg-blue-50 text-blue-700 font-semibold"
+                    ? "border-blue-800 bg-blue-50 text-blue-800 font-semibold"
                     : "bg-white hover:bg-gray-50",
             ].join(" ")}
         >
@@ -253,7 +253,7 @@ export function ProfileEditForm() {
                 </Card>
 
                 {/* 2행: ✅ 연소득(2칸) + 학력(1칸) */}
-                <Card title="연소득" className="md:col-span-2">
+                <Card title="연소득" className="md:col-span-1">
                     <div className="space-y-2">
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                             <span>연</span>
@@ -266,7 +266,7 @@ export function ProfileEditForm() {
                                         incomeMin: e.target.value === "" ? null : Number(e.target.value),
                                     })
                                 }
-                                className="h-11 w-full rounded-lg border px-3 text-sm outline-none focus:border-gray-900"
+                                className="h-11 w-30 rounded-lg border px-3 text-sm outline-none focus:border-gray-900"
                             />
                             <span>만원 이상 ~</span>
                         </div>
@@ -281,7 +281,7 @@ export function ProfileEditForm() {
                                         incomeMax: e.target.value === "" ? null : Number(e.target.value),
                                     })
                                 }
-                                className="h-11 w-full rounded-lg border px-3 text-sm outline-none focus:border-gray-900"
+                                className="h-11 w-30 rounded-lg border px-3 text-sm outline-none focus:border-gray-900"
                             />
                             <span>만원 이하</span>
                         </div>
@@ -380,8 +380,7 @@ function Card({
 
 /**
  * ✅ SquarePick
- * - 사진처럼 "정사각형 선택 카드"
- * - h-24~h-28 사이가 가장 비슷(지금은 24 유지)
+ * - "직사각형 선택 카드"
  */
 function SquarePick({
     active,
@@ -397,9 +396,9 @@ function SquarePick({
             type="button"
             onClick={onClick}
             className={[
-                "h-24 rounded-xl border bg-white p-3 text-sm transition",
+                "h-11 rounded-xl border bg-white p-3 text-sm transition",
                 active
-                    ? "border-blue-600 bg-blue-50 text-blue-700 font-semibold"
+                    ? "border-blue-800 bg-blue-50 text-blue-800 font-semibold"
                     : "hover:bg-gray-50",
             ].join(" ")}
         >

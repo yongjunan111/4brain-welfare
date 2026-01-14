@@ -9,7 +9,8 @@ export function CategoryMenu() {
     <section className="mb-10">
       <div className="flex flex-wrap items-center justify-center gap-6">
         {HOME_CATEGORIES.map((c) => {
-          const size = c.iconSize ?? 48;
+          const ring = 48;                 // ✅ 링(원형 테두리) 고정 크기
+          const icon = c.iconSize ?? 48;    // ✅ 아이콘은 원하는 크기(48 초과 가능)
 
           return (
             <button
@@ -18,26 +19,31 @@ export function CategoryMenu() {
               type="button"
               onClick={() => console.log("category:", c.key)}
             >
-              {/* ✅ 레이어링을 위한 relative 래퍼 */}
-              <span className="relative flex h-12 w-12 items-center justify-center">
-                {/* ✅ 1) 이미지(밑 레이어) */}
-                <Image
-                  src={c.icon}
-                  alt={c.label}
-                  width={size}
-                  height={size}
-                  className="z-0 object-contain"
-                />
-
-                {/* ✅ 2) 원형 테두리/배경(위 레이어) */}
+              {/* ✅ 링 기준 좌표계(48 고정) */}
+              <span
+                className="relative flex items-center justify-center cursor-pointer"
+                style={{ width: ring, height: ring }}
+              >
+                {/* ✅ 1) 아이콘: 링과 무관하게 크게 (absolute로 가운데 정렬) */}
                 <span
-                  className="
-                    pointer-events-none
-                    absolute inset-0
-                    rounded-full border bg-white/10
-                    z-10
-                  "
-                />
+                  className="absolute left-1/2 top-1/2 z-0"
+                  style={{
+                    width: icon,
+                    height: icon,
+                    transform: "translate(-50%, -50%)", // ✅ 정확히 중앙정렬
+                  }}
+                >
+                  <Image
+                    src={c.icon}
+                    alt={c.label}
+                    fill
+                    sizes={`${icon}px`} // ✅ 실제 렌더 크기에 맞춰 힌트
+                    className="object-contain"
+                  />
+                </span>
+
+                {/* ✅ 2) 링: 항상 48 */}
+                <span className="pointer-events-none absolute inset-0 z-10 rounded-full border bg-white/10" />
               </span>
 
               <span>{c.label}</span>

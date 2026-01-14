@@ -21,7 +21,7 @@ export const HOME_CATEGORIES: HomeCategory[] = [
     { key: "finance", label: "생활·금융", icon: "/icons/home/finance.png", iconSize: 48 },
     { key: "job", label: "일자리", icon: "/icons/home/job.png", iconSize: 48 },
     { key: "entrepreneurship", label: "창업", icon: "/icons/home/entrepreneurship.png", iconSize: 48 },
-    { key: "mental-health", label: "정신건강", icon: "/icons/home/mental-health.png", iconSize: 48 },
+    { key: "mental-health", label: "정신건강", icon: "/icons/home/mental-health.png", iconSize: 61 },
     { key: "emotional-wellbeing", label: "마음건강", icon: "/icons/home/emotional-wellbeing.png", iconSize: 40 },
     { key: "care-protection", label: "보호·돌봄", icon: "/icons/home/care-protection.png", iconSize: 30 },
 ];

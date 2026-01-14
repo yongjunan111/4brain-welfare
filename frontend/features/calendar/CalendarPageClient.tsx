@@ -105,7 +105,7 @@ export function CalendarPageClient() {
 
     return (
         <div className="mx-auto w-full max-w-[1280px] px-4 py-8">
-            {/* ✅ 상단 필터 바(스크린샷 스타일의 상단 검색영역 느낌) */}
+            {/* ✅ 상단 필터 바*/}
             <section className="mb-6">
                 <div className="flex items-center gap-2 rounded-xl border bg-white p-3">
                     <input

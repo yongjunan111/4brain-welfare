@@ -45,7 +45,7 @@ export function Header() {
           {/* 회원가입은 버튼처럼 보이게 */}
           <Link
             href="/signup"
-            className="rounded-md px-3 py-1.5 font-medium hover:bg-blue-700"
+            className="rounded-md px-3 py-1.5 font-medium"
           >
             회원가입
           </Link>

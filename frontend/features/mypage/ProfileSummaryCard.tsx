@@ -12,7 +12,7 @@ function Tile({ title, value }: { title: string; value: string }) {
     return (
         <div className="rounded-xl border bg-white p-5 text-center">
             <div className="text-xs text-gray-500">{title}</div>
-            <div className="mt-2 text-sm font-semibold text-blue-700">{value}</div>
+            <div className="mt-2 text-sm font-semibold text-blue-800">{value}</div>
         </div>
     );
 }
@@ -54,7 +54,7 @@ export function ProfileSummaryCard() {
                         </div>
 
                         <div className="text-xl font-bold">
-                            <span className="text-blue-700">{profile.displayName}</span>의 퍼스널 정보
+                            <span className="text-blue-800">{profile.displayName}</span>의 퍼스널 정보
                         </div>
                         <p className="mt-3 text-sm text-gray-700">
                             설정하신 개인정보 및 관심분야를 기반으로 맞춤 정책을 제공합니다.
@@ -83,7 +83,7 @@ export function ProfileSummaryCard() {
                         <div className="md:col-span-2">
                             <div className="rounded-xl border bg-white p-5 text-center">
                                 <div className="text-xs text-gray-500">취업상태</div>
-                                <div className="mt-2 text-sm font-semibold text-blue-700">
+                                <div className="mt-2 text-sm font-semibold text-blue-800">
                                     {labelJob(profile.jobStatus)}
                                 </div>
                             </div>
@@ -92,7 +92,7 @@ export function ProfileSummaryCard() {
                         <div>
                             <div className="rounded-xl border bg-white p-5 text-center">
                                 <div className="text-xs text-gray-500">특화분야</div>
-                                <div className="mt-2 text-sm font-semibold text-blue-700">
+                                <div className="mt-2 text-sm font-semibold text-blue-800">
                                     {labelSpecial(profile.specialtyField)}
                                 </div>
                             </div>
@@ -106,7 +106,7 @@ export function ProfileSummaryCard() {
                 <div className="text-sm font-semibold">신청자격진단 결과 현황</div>
                 <div className="mt-3 flex items-center justify-between rounded-lg bg-gray-50 p-4">
                     <div className="text-sm text-gray-700">
-                        총 <span className="font-semibold text-blue-700">0</span>건의 신청자격진단이력이 있습니다.
+                        총 <span className="font-semibold text-blue-800">0</span>건의 신청자격진단이력이 있습니다.
                     </div>
                     <Link
                         href="/policy"

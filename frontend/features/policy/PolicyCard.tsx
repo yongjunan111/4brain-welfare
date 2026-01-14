@@ -1,12 +1,13 @@
 // features/policy/PolicyCard.tsx
 import Link from "next/link";
-import { Policy } from "./policy.types";
+import { PolicyCardItem } from "./policy.types";
 
 /**
  * ✅ 카드 클릭 시 상세 페이지로 이동
  * - /policy/[id]
+ * - UI는 최소 정보만 필요하므로 PolicyCardItem 사용
  */
-export function PolicyCard({ policy }: { policy: Policy }) {
+export function PolicyCard({ policy }: { policy: PolicyCardItem }) {
   return (
     <Link
       href={`/policy/${policy.id}`}
@@ -19,7 +20,6 @@ export function PolicyCard({ policy }: { policy: Policy }) {
       </div>
 
       <h3 className="mb-2 line-clamp-1 text-sm font-semibold">{policy.title}</h3>
-
       <p className="line-clamp-4 text-xs leading-5 text-gray-600">{policy.summary}</p>
     </Link>
   );
