@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ChatbotModalHost } from "@/features/chatbot/ChatbotModalHost";
+import { ChatbotFloatingButton } from "@/features/chatbot/ChatbotFloatingButton";
+import { FontSizeManager } from "@/components/common/FontSizeManager";
 
 export const metadata: Metadata = {
     title: "복지나침반",
@@ -23,6 +25,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <main className="min-h-[calc(100vh-160px)]">{children}</main>
                 <Footer />
                 <ChatbotModalHost />
+                <ChatbotFloatingButton />
+                <FontSizeManager />
             </body>
         </html>
     );

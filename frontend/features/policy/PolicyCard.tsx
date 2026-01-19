@@ -5,20 +5,20 @@ import type { PolicyCardItem } from "./policy.types";
 import { POLICY_CATEGORY_IMAGE } from "./policy.images";
 
 export function PolicyCard({ policy }: { policy: PolicyCardItem }) {
-  // ✅ 이미지 src가 누락돼도 깨지지 않게 fallback 권장
+  // ✅ 이미지 src가 누락돼도 깨지지 않게 fallback (존재하는 이미지 사용)
   const imgSrc =
-    POLICY_CATEGORY_IMAGE[policy.category] ?? "/images/policy/placeholder.png";
+    POLICY_CATEGORY_IMAGE[policy.category] ?? "/images/policy/care-protection.png";
 
   return (
     <Link
       href={`/policy/${policy.id}`}
       className={[
-        "block overflow-hidden rounded-xl border bg-white",
+        "block overflow-hidden rounded-xl border border-gray-400 bg-white",
         "transition-shadow hover:shadow-md",
       ].join(" ")}
     >
       {/* ✅ (A) 카드 상단 고정 영역: hover와 무관 */}
-      <div className="p-4 pb-3">
+      <div className="p-4 pb-2">
         <div className="mb-2 flex items-center gap-2">
           {policy.isPriority && (
             <span className="inline-flex items-center rounded-full bg-yellow-500 px-3 py-1 text-xs font-semibold text-white">
@@ -30,13 +30,13 @@ export function PolicyCard({ policy }: { policy: PolicyCardItem }) {
           </span>
         </div>
 
-        <h3 className="line-clamp-2 text-lg font-extrabold tracking-tight text-gray-900">
+        <h3 className="line-clamp-2 h-12 text-md font-extrabold tracking-tight text-gray-900">
           {policy.title}
         </h3>
       </div>
 
       {/* ✅ (B) 이미지 영역: 여기만 hover 오버레이 적용 */}
-      <div className="group relative aspect-square w-full">
+      <div className="group relative aspect-[4/3] w-full">
         <Image
           src={imgSrc}
           alt={`${categoryLabel(policy.category)} 대표 이미지`}
@@ -64,13 +64,22 @@ export function PolicyCard({ policy }: { policy: PolicyCardItem }) {
               </span>
             </div>
 
-            <p className="whitespace-pre-line text-sm leading-6 text-gray-700">
-              {policy.summary}
-            </p>
-
-            <div className="mt-auto pt-4 text-xs text-gray-500">
-              클릭하면 상세 페이지로 이동
+            {/* 1. 정책 설명 */}
+            <div className="mb-2">
+              <p className="mb-1 text-[11px] font-bold text-gray-900">정책 설명</p>
+              <p className="line-clamp-3 text-xs leading-4 text-gray-600">
+                {policy.summary}
+              </p>
             </div>
+
+            {/* 2. 지원 내용 */}
+            <div>
+              <p className="mb-1 text-[11px] font-bold text-gray-900">지원 내용</p>
+              <p className="line-clamp-3 text-xs leading-4 text-gray-600">
+                {policy.content || "상세 내용을 확인하세요."}
+              </p>
+            </div>
+
           </div>
         </div>
       </div>
