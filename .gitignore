@@ -5,7 +5,20 @@ __pycache__/
 
 # C extensions
 *.so
+# macOS
+.DS_Store
+**/.DS_Store
 
+# 벡터 DB (용량 큼, 로컬에서 재생성)
+data/chroma_db/
+
+# 백업 파일
+*_backups.py
+*_backup.py
+
+# 테스트 파일
+test.py
+*_test.py
 # Distribution / packaging
 .Python
 build/
