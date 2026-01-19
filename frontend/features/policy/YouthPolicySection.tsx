@@ -1,9 +1,9 @@
 // features/policy/YouthPolicySection.tsx
-import { fetchYouthPolicies } from "./policy.api";
 import { PolicyCard } from "./PolicyCard";
+import { fetchYouthPolicyCards } from "./policy.api";
 
 export async function YouthPolicySection() {
-  const policies = await fetchYouthPolicies();
+  const policies = await fetchYouthPolicyCards(6); // ✅ PolicyCardItem[]
 
   return (
     <section className="pb-10">
@@ -14,7 +14,7 @@ export async function YouthPolicySection() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {policies.map((p) => (
           <PolicyCard key={p.id} policy={p} />
         ))}

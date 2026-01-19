@@ -1,55 +1,101 @@
 // features/policy/PolicyCard.tsx
-import type { Policy } from "./policy.types";
+import Link from "next/link";
+import Image from "next/image";
+import type { PolicyCardItem } from "./policy.types";
+import { POLICY_CATEGORY_IMAGE } from "./policy.images";
 
-function tagStyle(tag: Policy["tag"]) {
-  // ✅ 태그별 배지 스타일 (나중에 디자인 시스템 생기면 교체)
-  switch (tag) {
-    case "청년":
-      return "bg-orange-100 text-orange-700";
-    case "주거":
-      return "bg-blue-100 text-blue-700";
-    case "금융":
-      return "bg-emerald-100 text-emerald-700";
-    case "일자리":
-      return "bg-indigo-100 text-indigo-700";
-    case "교육":
-      return "bg-yellow-100 text-yellow-700";
-    default:
-      return "bg-gray-100 text-gray-700";
-  }
-}
+export function PolicyCard({ policy }: { policy: PolicyCardItem }) {
+  // ✅ 이미지 src가 누락돼도 깨지지 않게 fallback 권장
+  const imgSrc =
+    POLICY_CATEGORY_IMAGE[policy.category] ?? "/images/policy/placeholder.png";
 
-function imagePlaceholder(variant?: Policy["imageVariant"]) {
-  // ✅ 실제 일러스트/썸네일 들어오기 전 임시 박스
-  // public 이미지 연결 시 img로 교체
-  const label =
-    variant === "family" ? "👨‍👩‍👧‍👦" : variant === "study" ? "📚" : "♿️";
   return (
-    <div className="flex h-[180px] items-center justify-center rounded-xl bg-gray-50 text-5xl">
-      {label}
-    </div>
-  );
-}
+    <Link
+      href={`/policy/${policy.id}`}
+      className={[
+        "block overflow-hidden rounded-xl border bg-white",
+        "transition-shadow hover:shadow-md",
+      ].join(" ")}
+    >
+      {/* ✅ (A) 카드 상단 고정 영역: hover와 무관 */}
+      <div className="p-4 pb-3">
+        <div className="mb-2 flex items-center gap-2">
+          {policy.isPriority && (
+            <span className="inline-flex items-center rounded-full bg-yellow-500 px-3 py-1 text-xs font-semibold text-white">
+              1순위
+            </span>
+          )}
+          <span className="inline-flex items-center rounded-full border bg-white px-3 py-1 text-xs font-semibold text-gray-900">
+            {categoryLabel(policy.category)}
+          </span>
+        </div>
 
-export function PolicyCard({ policy }: { policy: Policy }) {
-  return (
-    <article className="rounded-2xl border bg-white p-3 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <span
-          className={`rounded-full px-2 py-1 text-xs font-medium ${tagStyle(
-            policy.tag
-          )}`}
-        >
-          {policy.tag}
-        </span>
+        <h3 className="line-clamp-2 text-lg font-extrabold tracking-tight text-gray-900">
+          {policy.title}
+        </h3>
       </div>
 
-      {imagePlaceholder(policy.imageVariant)}
+      {/* ✅ (B) 이미지 영역: 여기만 hover 오버레이 적용 */}
+      <div className="group relative aspect-square w-full">
+        <Image
+          src={imgSrc}
+          alt={`${categoryLabel(policy.category)} 대표 이미지`}
+          fill
+          className="object-cover"
+          priority={false}
+        />
 
-      <h3 className="mt-3 line-clamp-2 text-sm font-semibold">{policy.title}</h3>
-      {policy.summary ? (
-        <p className="mt-1 line-clamp-2 text-xs text-gray-600">{policy.summary}</p>
-      ) : null}
-    </article>
+        {/* 기본 상태에서 이미지에 살짝 그라데이션(선택) */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/25 to-transparent" />
+
+        {/* ✅ hover 시 요약 오버레이 */}
+        <div
+          className={[
+            "absolute inset-0",
+            "bg-white/95",
+            "opacity-0 group-hover:opacity-100",
+            "transition-opacity duration-200",
+          ].join(" ")}
+        >
+          <div className="flex h-full flex-col p-4">
+            <div className="mb-2">
+              <span className="rounded border px-2 py-0.5 text-[10px] text-gray-600">
+                {policy.region}
+              </span>
+            </div>
+
+            <p className="whitespace-pre-line text-sm leading-6 text-gray-700">
+              {policy.summary}
+            </p>
+
+            <div className="mt-auto pt-4 text-xs text-gray-500">
+              클릭하면 상세 페이지로 이동
+            </div>
+          </div>
+        </div>
+      </div>
+    </Link>
   );
+}
+
+/** 카테고리 라벨(표시용) */
+function categoryLabel(category: PolicyCardItem["category"]) {
+  switch (category) {
+    case "housing":
+      return "주거";
+    case "finance":
+      return "생활·금융";
+    case "job":
+      return "일자리";
+    case "entrepreneurship":
+      return "창업";
+    case "mental-health":
+      return "정신건강";
+    case "emotional-wellbeing":
+      return "마음건강";
+    case "care-protection":
+      return "보호·돌봄";
+    default:
+      return "카테고리";
+  }
 }
