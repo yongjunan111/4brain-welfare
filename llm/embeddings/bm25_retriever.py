@@ -43,7 +43,8 @@ def korean_preprocess(text: str) -> List[str]:
         tokens = [
             token.form
             for token in kiwi.tokenize(text)
-            if token.tag in ["NNG", "NNP", "NNB", "VV", "VA", "XR"]
+            if token.tag in ["NNG", "NNP", "VV", "VA", "XR"]
+            
         ]
         return tokens if tokens else text.split()
     except Exception:
