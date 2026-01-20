@@ -98,6 +98,16 @@ class Policy(models.Model):
     # 지역
     district = models.CharField(max_length=20, null=True, blank=True)
 
+    # 카테고리 (대분류/중분류)
+    lclsf_nm = models.CharField(
+        max_length=50, blank=True,
+        help_text='대분류 (일자리, 주거, 교육, 복지문화, 참여권리)'
+    )
+    mclsf_nm = models.CharField(
+        max_length=50, blank=True,
+        help_text='중분류 (원본 API mclsfNm)'
+    )
+
     # 카테고리 (M:N)
     categories = models.ManyToManyField(Category, related_name='policies')
 

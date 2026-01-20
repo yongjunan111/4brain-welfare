@@ -150,37 +150,52 @@ def _check_special_conditions(policy, user_info):
 
 
 def _get_relevant_categories(user_info):
-    """사용자 맥락에서 관련 카테고리 도출"""
+    """
+    사용자 맥락에서 관련 카테고리 도출
+    
+    [회의 결정사항 2026.01.19 반영]
+    - 기존: 대분류(Categories M:N)만 사용
+    - 변경: 중분류(mclsf_nm) 키워드를 함께 반환하여 정밀 매칭 유도
+    """
     relevant = []
     
-    # 주거 맥락
+    # 주거 맥락 → 중분류 키워드 추가 (주거지원, 전월세임대 등)
     housing = user_info.get('housing_type', '')
     if housing:
-        relevant.append('주거')
+        relevant.append('주거')  # 대분류
+        relevant.append('주거지원')  # 중분류 (API mclsf_nm)
         if housing == '전세':
             relevant.append('전세')
+            relevant.append('전월세임대')
         elif housing == '월세':
             relevant.append('월세')
+            relevant.append('전월세임대')
     
-    # 취업 맥락
+    # 취업 맥락 → 중분류 키워드 추가 (취업, 인턴/현장경험, 창업)
     emp = user_info.get('employment_status', '')
     if emp in ['구직중', '무직']:
-        relevant.append('일자리')
+        relevant.append('일자리')  # 대분류
+        relevant.append('취업')  # 중분류
+        relevant.append('인턴/현장경험')
+    elif emp == '창업준비':
+        relevant.append('창업')  # 중분류
     
-    # 소득 맥락
+    # 소득 맥락 → 중분류 키워드
     income = user_info.get('income')
     if income is not None and income < 300:
-        relevant.append('생활')
-        relevant.append('금융')
+        relevant.append('생활')  # 대분류
+        relevant.append('금융지원')  # 중분류
+        relevant.append('취약계층 및 금융지원')
     
     # 특수조건 맥락
     special = user_info.get('special_conditions', [])
     if any(s in ['한부모', '장애인', '장애'] for s in special):
-        relevant.append('생활')
+        relevant.append('취약계층 및 금융지원')
     
-    # 자녀 맥락
+    # 자녀 맥락 → 중분류 키워드
     if user_info.get('has_children') or user_info.get('children_ages'):
-        relevant.append('교육')
+        relevant.append('교육')  # 대분류
+        relevant.append('장학금/학자금')  # 중분류
     
     # 사용자가 직접 선택한 필요분야
     needs = user_info.get('needs', [])
@@ -191,7 +206,7 @@ def _get_relevant_categories(user_info):
     # 기본: 청년이면 일자리/주거
     age = user_info.get('age')
     if not relevant and age and 19 <= age <= 39:
-        relevant = ['주거', '일자리', '생활']
+        relevant = ['주거', '일자리', '생활', '취업', '주거지원']
     
     return relevant
 
@@ -236,8 +251,11 @@ def _calc_priority(policy, user_info, relevant_categories):
     description = (policy.plcy_expln_cn or '').lower()
     support_content = (policy.plcy_sprt_cn or '').lower()
     
-    # 카테고리 이름들
+    # 카테고리 (대분류 + 중분류)
+    # 1. 대분류: M:N 관계 (기존 로직 유지)
     category_names = [c.name.lower() for c in policy.categories.all()]
+    # 2. 중분류: Policy 모델의 mclsf_nm 필드 사용 (신규 추가)
+    mclsf = (policy.mclsf_nm or '').lower()
     
     # 사용자 정보
     housing = user_info.get('housing_type', '')
@@ -289,11 +307,20 @@ def _calc_priority(policy, user_info, relevant_categories):
         elif max_amount >= 10:
             score += 5
     
-    # 5. 관련 카테고리 매칭
+    # 5. 관련 카테고리 매칭 (중분류 우선 적용)
     for cat in relevant_categories:
         cat_lower = cat.lower()
-        if any(cat_lower in c for c in category_names):
+        
+        # [2026.01.19 반영] 중분류 매칭 시 가점 상향 (+30)
+        # 예: 사용자가 '전월세임대' 키워드를 가질 때, 정책 중분류가 '전월세임대'면 30점
+        if cat_lower in mclsf:
+            score += 30
+            
+        # 기존 대분류 매칭 (+20)
+        elif any(cat_lower in c for c in category_names):
             score += 20
+            
+        # 텍스트 단순 매칭 (+10)
         if cat_lower in description or cat_lower in policy_name:
             score += 10
     
@@ -331,14 +358,20 @@ def _calc_priority(policy, user_info, relevant_categories):
 
 
 def _select_diverse_categories(scored_policies, max_per_category=2, limit=10):
-    """카테고리별로 골고루 선택"""
+    """
+    카테고리별로 골고루 선택 (다양성 보장)
+    
+    [회의 결정사항 2026.01.19 반영]
+    - 기존: 대분류(Categories) 기준으로만 분산
+    - 변경: 중분류(mclsf_nm)가 있으면 중분류 기준으로 분산 선택
+      (대분류가 같아도 중분류가 다르면 다른 혜택으로 간주)
+    """
     final_results = []
     categories_selected = {}
     
     for policy, score in scored_policies:
-        # 첫 번째 카테고리를 기준으로
-        categories = list(policy.categories.all())
-        cat_name = categories[0].name if categories else '기타'
+        # 중분류 우선 사용, 없으면 대분류 사용
+        cat_name = policy.mclsf_nm or policy.lclsf_nm or '기타'
         
         if categories_selected.get(cat_name, 0) < max_per_category:
             final_results.append((policy, score))
