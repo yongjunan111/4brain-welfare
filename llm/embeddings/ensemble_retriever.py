@@ -322,7 +322,7 @@ if __name__ == "__main__":
     
     # 테스트 쿼리들
     compare_retrievers("월세 지원", k=5)
-    compare_retrievers("취업 프로그램", k=5)
+    compare_retrievers("취업 지원", k=5)
     compare_retrievers("창업 지원", k=5)
     
     print("\n" + "="*60)
