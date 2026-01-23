@@ -1,5 +1,5 @@
 """
-Retriever 정량 평가 스크립트 v2
+Retriever 정량 평가 스크립트 v2.1
 
 준용 문서 기준 세부 지표 포함:
 - FAQ: Hit@1, Hit@3, Hit@5, MRR@10
@@ -10,10 +10,12 @@ Retriever 정량 평가 스크립트 v2
     python evaluate_retriever.py -f ../../data/test_dataset.json
     python evaluate_retriever.py -f ../../data/test_dataset.json --show-failed
     python evaluate_retriever.py -f ../../data/test_dataset.json -o results.json
+    python evaluate_retriever.py -f ../../data/test_dataset.json --delay 6  # Rate limit 대응
 """
 
 import sys
 import os
+import time
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'embeddings'))
 
 import json
@@ -317,9 +319,17 @@ def aggregate_results(results: List[CaseResult]) -> EvalSummary:
 def evaluate_retriever(
     test_cases: List[Dict],
     use_reranker: bool,
-    verbose: bool = False
+    verbose: bool = False,
+    rate_limit_delay: float = 0
 ) -> EvalSummary:
-    """전체 테스트셋 평가"""
+    """전체 테스트셋 평가
+    
+    Args:
+        test_cases: 테스트 케이스 리스트
+        use_reranker: 리랭커 사용 여부
+        verbose: 진행률 출력 여부
+        rate_limit_delay: 리랭커 호출 간 대기 시간(초). Cohere Trial은 6 권장
+    """
     results = []
     
     for i, case in enumerate(test_cases):
@@ -327,6 +337,10 @@ def evaluate_retriever(
             print(f"\r평가 중... {i+1}/{len(test_cases)}", end="", flush=True)
         result = evaluate_single_case(case, use_reranker)
         results.append(result)
+        
+        # Rate limit 대응 (리랭커 사용 시에만)
+        if use_reranker and rate_limit_delay > 0:
+            time.sleep(rate_limit_delay)
     
     if verbose:
         print()
@@ -339,19 +353,35 @@ def evaluate_retriever(
 # ============================================================================
 def run_ab_test(
     test_cases: List[Dict],
-    verbose: bool = True
+    verbose: bool = True,
+    rate_limit_delay: float = 0
 ) -> Dict[str, EvalSummary]:
-    """앙상블 vs 앙상블+리랭커 A/B 테스트"""
+    """앙상블 vs 앙상블+리랭커 A/B 테스트
+    
+    Args:
+        test_cases: 테스트 케이스 리스트
+        verbose: 진행률 출력 여부
+        rate_limit_delay: 리랭커 호출 간 대기 시간(초)
+    """
     print(f"\n{'='*60}")
     print(f"A/B 테스트 시작")
     print(f"테스트 케이스: {len(test_cases)}개")
+    if rate_limit_delay > 0:
+        print(f"Rate limit delay: {rate_limit_delay}초")
+        estimated_time = len(test_cases) * rate_limit_delay / 60
+        print(f"예상 소요시간 (리랭커): ~{estimated_time:.1f}분")
     print('='*60)
     
     print("\n[A] 앙상블만 (리랭커 OFF)")
     result_a = evaluate_retriever(test_cases, use_reranker=False, verbose=verbose)
     
     print("\n[B] 앙상블 + 리랭커")
-    result_b = evaluate_retriever(test_cases, use_reranker=True, verbose=verbose)
+    result_b = evaluate_retriever(
+        test_cases, 
+        use_reranker=True, 
+        verbose=verbose, 
+        rate_limit_delay=rate_limit_delay
+    )
     
     return {
         "ensemble_only": result_a,
@@ -507,6 +537,12 @@ def main():
         type=str,
         help="결과 JSON 저장 경로"
     )
+    parser.add_argument(
+        "--delay", "-d",
+        type=float,
+        default=0,
+        help="리랭커 호출 간 대기 시간(초). Cohere Trial 키는 --delay 6 권장"
+    )
     
     args = parser.parse_args()
     
@@ -516,7 +552,7 @@ def main():
     print(f"로드 완료: {len(test_cases)}개 케이스")
     
     # A/B 테스트 실행
-    results = run_ab_test(test_cases)
+    results = run_ab_test(test_cases, rate_limit_delay=args.delay)
     
     # 결과 출력
     print_comparison(results)
