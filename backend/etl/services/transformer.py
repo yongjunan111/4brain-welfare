@@ -40,43 +40,43 @@ DEFAULT_MAX_AGE = 99
 @dataclass
 class TransformedPolicy:
     """변환된 정책 데이터"""
-    plcy_no: str
-    plcy_nm: str
-    plcy_expln_cn: str
-    plcy_sprt_cn: str
+    policy_id: str  # [RENAME] plcy_no → policy_id
+    title: str  # [RENAME] plcy_nm → title
+    description: str  # [RENAME] plcy_expln_cn → description
+    support_content: str  # [RENAME] plcy_sprt_cn → support_content
 
     # 나이 (정제 규칙 적용)
-    sprt_trgt_min_age: Optional[int]
-    sprt_trgt_max_age: Optional[int]
+    age_min: Optional[int]  # [RENAME] sprt_trgt_min_age → age_min
+    age_max: Optional[int]  # [RENAME] sprt_trgt_max_age → age_max
 
     # 소득/자격 조건
-    earn_cnd_se_cd: str
-    earn_min_amt: Optional[int]
-    earn_max_amt: Optional[int]
-    mrg_stts_cd: str
-    job_cd: str
-    school_cd: str
+    income_level: str  # [RENAME] earn_cnd_se_cd → income_level
+    income_min: Optional[int]  # [RENAME] earn_min_amt → income_min
+    income_max: Optional[int]  # [RENAME] earn_max_amt → income_max
+    marriage_status: str  # [RENAME] mrg_stts_cd → marriage_status
+    employment_status: str  # [RENAME] job_cd → employment_status
+    education_status: str  # [RENAME] school_cd → education_status
 
     # 신청기간 (2024→2026 변환 적용)
-    aply_start_dt: Optional[date]
-    aply_end_dt: Optional[date]
-    biz_prd_bgng_ymd: Optional[date]
-    biz_prd_end_ymd: Optional[date]
+    apply_start_date: Optional[date]  # [RENAME] aply_start_dt → apply_start_date
+    apply_end_date: Optional[date]  # [RENAME] aply_end_dt → apply_end_date
+    business_start_date: Optional[date]  # [RENAME] biz_prd_bgng_ymd → business_start_date
+    business_end_date: Optional[date]  # [RENAME] biz_prd_end_ymd → business_end_date
 
     # 신청 방법
-    plcy_aply_mthd_cn: str
-    aply_url_addr: str
+    apply_method: str  # [RENAME] plcy_aply_mthd_cn → apply_method
+    apply_url: str  # [RENAME] aply_url_addr → apply_url
 
-    # 지역
+    # 지역 (변경 없음)
     district: Optional[str]
 
     # 카테고리 (대분류 + 중분류)
-    lclsf_nm: str  # 대분류: UI 표시용
-    mclsf_nm: str  # 중분류: 매칭 로직용
+    category: str  # [RENAME] lclsf_nm → category (대분류: UI 표시용)
+    subcategory: str  # [RENAME] mclsf_nm → subcategory (중분류: 매칭 로직용)
 
     # 메타데이터
-    frst_reg_dt: Optional[datetime]
-    last_mdfcn_dt: Optional[datetime]
+    created_at: Optional[datetime]  # [RENAME] frst_reg_dt → created_at
+    updated_at: Optional[datetime]  # [RENAME] last_mdfcn_dt → updated_at
 
 
 class PolicyTransformer:
@@ -95,36 +95,36 @@ class PolicyTransformer:
         aply_start, aply_end = self._parse_date_range_with_year_fix(raw.get('aplyYmd', ''))
 
         return TransformedPolicy(
-            plcy_no=raw['plcyNo'],
-            plcy_nm=raw.get('plcyNm', ''),
-            plcy_expln_cn=raw.get('plcyExplnCn', ''),
-            plcy_sprt_cn=raw.get('plcySprtCn', ''),
+            policy_id=raw['plcyNo'],  # [RENAME] plcy_no → policy_id
+            title=raw.get('plcyNm', ''),  # [RENAME] plcy_nm → title
+            description=raw.get('plcyExplnCn', ''),  # [RENAME] plcy_expln_cn → description
+            support_content=raw.get('plcySprtCn', ''),  # [RENAME] plcy_sprt_cn → support_content
 
-            sprt_trgt_min_age=min_age,
-            sprt_trgt_max_age=max_age,
+            age_min=min_age,  # [RENAME] sprt_trgt_min_age → age_min
+            age_max=max_age,  # [RENAME] sprt_trgt_max_age → age_max
 
-            earn_cnd_se_cd=raw.get('earnCndSeCd', ''),
-            earn_min_amt=self._parse_int(raw.get('earnMinAmt')),
-            earn_max_amt=self._parse_int(raw.get('earnMaxAmt')),
-            mrg_stts_cd=raw.get('mrgSttsCd', ''),
-            job_cd=raw.get('jobCd', ''),
-            school_cd=raw.get('schoolCd', ''),
+            income_level=raw.get('earnCndSeCd', ''),  # [RENAME] earn_cnd_se_cd → income_level
+            income_min=self._parse_int(raw.get('earnMinAmt')),  # [RENAME] earn_min_amt → income_min
+            income_max=self._parse_int(raw.get('earnMaxAmt')),  # [RENAME] earn_max_amt → income_max
+            marriage_status=raw.get('mrgSttsCd', ''),  # [RENAME] mrg_stts_cd → marriage_status
+            employment_status=raw.get('jobCd', ''),  # [RENAME] job_cd → employment_status
+            education_status=raw.get('schoolCd', ''),  # [RENAME] school_cd → education_status
 
-            aply_start_dt=aply_start,
-            aply_end_dt=aply_end,
-            biz_prd_bgng_ymd=self._parse_date_with_year_fix(raw.get('bizPrdBgngYmd')),
-            biz_prd_end_ymd=self._parse_date_with_year_fix(raw.get('bizPrdEndYmd')),
+            apply_start_date=aply_start,  # [RENAME] aply_start_dt → apply_start_date
+            apply_end_date=aply_end,  # [RENAME] aply_end_dt → apply_end_date
+            business_start_date=self._parse_date_with_year_fix(raw.get('bizPrdBgngYmd')),  # [RENAME] biz_prd_bgng_ymd → business_start_date
+            business_end_date=self._parse_date_with_year_fix(raw.get('bizPrdEndYmd')),  # [RENAME] biz_prd_end_ymd → business_end_date
 
-            plcy_aply_mthd_cn=raw.get('plcyAplyMthdCn', ''),
-            aply_url_addr=raw.get('aplyUrlAddr', ''),
+            apply_method=raw.get('plcyAplyMthdCn', ''),  # [RENAME] plcy_aply_mthd_cn → apply_method
+            apply_url=raw.get('aplyUrlAddr', ''),  # [RENAME] aply_url_addr → apply_url
 
             district=self._parse_district(raw.get('rgtrInstCdNm', '')),
 
-            lclsf_nm=raw.get('lclsfNm', '').strip(),  # 대분류
-            mclsf_nm=raw.get('mclsfNm', '').strip(),  # 중분류
+            category=raw.get('lclsfNm', '').strip(),  # [RENAME] lclsf_nm → category (대분류)
+            subcategory=raw.get('mclsfNm', '').strip(),  # [RENAME] mclsf_nm → subcategory (중분류)
 
-            frst_reg_dt=self._parse_datetime(raw.get('frstRegDt')),
-            last_mdfcn_dt=self._parse_datetime(raw.get('lastMdfcnDt')),
+            created_at=self._parse_datetime(raw.get('frstRegDt')),  # [RENAME] frst_reg_dt → created_at
+            updated_at=self._parse_datetime(raw.get('lastMdfcnDt')),  # [RENAME] last_mdfcn_dt → updated_at
         )
 
     def transform_many(self, raw_list: list[dict]) -> list[TransformedPolicy]:
@@ -135,9 +135,9 @@ class PolicyTransformer:
             try:
                 results.append(self.transform(raw))
             except Exception as e:
-                plcy_no = raw.get('plcyNo', 'UNKNOWN')
-                logger.warning(f"변환 실패 ({plcy_no}): {e}")
-                errors.append(plcy_no)
+                policy_id = raw.get('plcyNo', 'UNKNOWN')  # [RENAME] plcy_no → policy_id
+                logger.warning(f"변환 실패 ({policy_id}): {e}")
+                errors.append(policy_id)
 
         if errors:
             logger.warning(f"총 {len(errors)}개 변환 실패")
@@ -243,10 +243,10 @@ class PolicyTransformer:
         try:
             # 1. 일단 문자를 날짜시간으로 바꿈 (아직 타임존 정보 없음)
             naive_dt = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
-            
+
             # 2. Django 설정(Asia/Seoul)에 맞춰 타임존 도장을 찍어줌 (이게 핵심!)
             return timezone.make_aware(naive_dt)
-            
+
         except ValueError:
             return None
 

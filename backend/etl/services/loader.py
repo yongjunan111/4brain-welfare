@@ -57,8 +57,8 @@ class PolicyLoader:
                 else:
                     updated += 1
             except Exception as e:
-                logger.error(f"적재 실패 ({policy.plcy_no}): {e}")
-                errors.append(policy.plcy_no)
+                logger.error(f"적재 실패 ({policy.policy_id}): {e}")  # [RENAME] plcy_no → policy_id
+                errors.append(policy.policy_id)  # [RENAME] plcy_no → policy_id
                 skipped += 1
 
         logger.info(f"적재 완료: 생성 {created}, 수정 {updated}, 스킵 {skipped}")
@@ -66,8 +66,8 @@ class PolicyLoader:
 
     def _load_one(self, policy: TransformedPolicy) -> bool:
         # 나이 기본값 적용 (빈 값일 때만, 0은 유지)
-        min_age = policy.sprt_trgt_min_age
-        max_age = policy.sprt_trgt_max_age
+        min_age = policy.age_min  # [RENAME] sprt_trgt_min_age → age_min
+        max_age = policy.age_max  # [RENAME] sprt_trgt_max_age → age_max
 
         if min_age is None:
             min_age = self.DEFAULT_MIN_AGE
@@ -75,46 +75,46 @@ class PolicyLoader:
             max_age = self.DEFAULT_MAX_AGE
 
         obj, created = Policy.objects.update_or_create(
-            plcy_no=policy.plcy_no,
+            policy_id=policy.policy_id,  # [RENAME] plcy_no → policy_id
             defaults={
-                'plcy_nm': policy.plcy_nm,
-                'plcy_expln_cn': policy.plcy_expln_cn,
-                'plcy_sprt_cn': policy.plcy_sprt_cn,
-                'sprt_trgt_min_age': min_age,
-                'sprt_trgt_max_age': max_age,
-                'earn_cnd_se_cd': policy.earn_cnd_se_cd,
-                'earn_min_amt': policy.earn_min_amt,
-                'earn_max_amt': policy.earn_max_amt,
-                'mrg_stts_cd': policy.mrg_stts_cd,
-                'job_cd': policy.job_cd,
-                'school_cd': policy.school_cd,
-                'aply_start_dt': policy.aply_start_dt,
-                'aply_end_dt': policy.aply_end_dt,
-                'biz_prd_bgng_ymd': policy.biz_prd_bgng_ymd,
-                'biz_prd_end_ymd': policy.biz_prd_end_ymd,
-                'plcy_aply_mthd_cn': policy.plcy_aply_mthd_cn,
-                'aply_url_addr': policy.aply_url_addr,
+                'title': policy.title,  # [RENAME] plcy_nm → title
+                'description': policy.description,  # [RENAME] plcy_expln_cn → description
+                'support_content': policy.support_content,  # [RENAME] plcy_sprt_cn → support_content
+                'age_min': min_age,  # [RENAME] sprt_trgt_min_age → age_min
+                'age_max': max_age,  # [RENAME] sprt_trgt_max_age → age_max
+                'income_level': policy.income_level,  # [RENAME] earn_cnd_se_cd → income_level
+                'income_min': policy.income_min,  # [RENAME] earn_min_amt → income_min
+                'income_max': policy.income_max,  # [RENAME] earn_max_amt → income_max
+                'marriage_status': policy.marriage_status,  # [RENAME] mrg_stts_cd → marriage_status
+                'employment_status': policy.employment_status,  # [RENAME] job_cd → employment_status
+                'education_status': policy.education_status,  # [RENAME] school_cd → education_status
+                'apply_start_date': policy.apply_start_date,  # [RENAME] aply_start_dt → apply_start_date
+                'apply_end_date': policy.apply_end_date,  # [RENAME] aply_end_dt → apply_end_date
+                'business_start_date': policy.business_start_date,  # [RENAME] biz_prd_bgng_ymd → business_start_date
+                'business_end_date': policy.business_end_date,  # [RENAME] biz_prd_end_ymd → business_end_date
+                'apply_method': policy.apply_method,  # [RENAME] plcy_aply_mthd_cn → apply_method
+                'apply_url': policy.apply_url,  # [RENAME] aply_url_addr → apply_url
                 'district': policy.district,
-                'lclsf_nm': policy.lclsf_nm,  # 대분류
-                'mclsf_nm': policy.mclsf_nm,  # 중분류
-                'frst_reg_dt': policy.frst_reg_dt,
-                'last_mdfcn_dt': policy.last_mdfcn_dt,
+                'category': policy.category,  # [RENAME] lclsf_nm → category (대분류)
+                'subcategory': policy.subcategory,  # [RENAME] mclsf_nm → subcategory (중분류)
+                'created_at': policy.created_at,  # [RENAME] frst_reg_dt → created_at
+                'updated_at': policy.updated_at,  # [RENAME] last_mdfcn_dt → updated_at
             }
         )
 
         # 카테고리 연결 (대분류 기준)
-        self._link_categories(obj, policy.lclsf_nm)
+        self._link_categories(obj, policy.category)  # [RENAME] lclsf_nm → category
 
         return created
 
-    def _link_categories(self, policy_obj: Policy, lclsf_nm: str):
+    def _link_categories(self, policy_obj: Policy, category: str):  # [RENAME] lclsf_nm → category
         policy_obj.categories.clear()
 
-        if not lclsf_nm:
+        if not category:  # [RENAME] lclsf_nm → category
             policy_obj.categories.add(self._category_cache['기타'])
             return
 
-        mapped_name = self.CATEGORY_MAPPING.get(lclsf_nm, '기타')
-        category = self._category_cache.get(mapped_name)
-        if category:
-            policy_obj.categories.add(category)
+        mapped_name = self.CATEGORY_MAPPING.get(category, '기타')  # [RENAME] lclsf_nm → category
+        category_obj = self._category_cache.get(mapped_name)
+        if category_obj:
+            policy_obj.categories.add(category_obj)
