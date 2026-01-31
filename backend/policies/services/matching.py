@@ -147,7 +147,6 @@ def _get_relevant_categories(user_info):
         # ---------------------------------------------------------------------
         relevant.append('전월세 및 주거급여 지원')
         relevant.append('주택 및 거주지')
-        relevant.append('기숙사')
 
         if housing == '전세':
             relevant.append('전세')
@@ -192,8 +191,6 @@ def _get_relevant_categories(user_info):
         # [2026.01.20] 중분류 키워드 수정 내역
         # ---------------------------------------------------------------------
         relevant.append('교육비지원')
-        relevant.append('미래역량강화')
-        relevant.append('온라인교육')
 
     # 문화/예술 관심
     if '예술' in user_info.get('interests', []):
