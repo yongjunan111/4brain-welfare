@@ -137,43 +137,69 @@ def _get_relevant_categories(user_info):
     """
     relevant = []
 
-    # 주거 맥락 → 중분류 키워드 추가 (주거지원, 전월세임대 등)
+    # 주거 맥락 → 중분류 키워드
     housing = user_info.get('housing_type', '')
     if housing:
         relevant.append('주거')  # 대분류
-        relevant.append('주거지원')  # 중분류 (API mclsf_nm)
+
+        # ---------------------------------------------------------------------
+        # [2026.01.20] 중분류 키워드 수정 내역 (API 실제 값 반영)
+        # ---------------------------------------------------------------------
+        relevant.append('전월세 및 주거급여 지원')
+        relevant.append('주택 및 거주지')
+        relevant.append('기숙사')
+
         if housing == '전세':
             relevant.append('전세')
-            relevant.append('전월세임대')
         elif housing == '월세':
             relevant.append('월세')
-            relevant.append('전월세임대')
 
-    # 취업 맥락 → 중분류 키워드 추가 (취업, 인턴/현장경험, 창업)
+    # 취업 맥락
     emp = user_info.get('employment_status', '')
     if emp in ['구직중', '무직']:
         relevant.append('일자리')  # 대분류
-        relevant.append('취업')  # 중분류
-        relevant.append('인턴/현장경험')
-    elif emp == '창업준비':
-        relevant.append('창업')  # 중분류
 
-    # 소득 맥락 → 중분류 키워드
+        # ---------------------------------------------------------------------
+        # [2026.01.20] 중분류 키워드 수정 내역
+        # ---------------------------------------------------------------------
+        relevant.append('취업')
+        relevant.append('창업')
+        relevant.append('재직자')
+
+    elif emp == '창업준비':
+        relevant.append('창업')
+
+    # 소득 맥락 (생활지원)
     income = user_info.get('income')
     if income is not None and income < 300:
-        relevant.append('생활')  # 대분류
-        relevant.append('금융지원')  # 중분류
+        # ---------------------------------------------------------------------
+        # [2026.01.20] 대분류 변경 (생활 -> 복지문화)
+        # ---------------------------------------------------------------------
+        relevant.append('복지문화')  # 대분류
         relevant.append('취약계층 및 금융지원')
 
     # 특수조건 맥락
     special = user_info.get('special_conditions', [])
     if any(s in ['한부모', '장애인', '장애'] for s in special):
         relevant.append('취약계층 및 금융지원')
+        relevant.append('건강')  # 신규 추가
 
-    # 자녀 맥락 → 중분류 키워드
+    # 자녀/학생 맥락
     if user_info.get('has_children') or user_info.get('children_ages'):
         relevant.append('교육')  # 대분류
-        relevant.append('장학금/학자금')  # 중분류
+
+        # ---------------------------------------------------------------------
+        # [2026.01.20] 중분류 키워드 수정 내역
+        # ---------------------------------------------------------------------
+        relevant.append('교육비지원')
+        relevant.append('미래역량강화')
+        relevant.append('온라인교육')
+
+    # 문화/예술 관심
+    if '예술' in user_info.get('interests', []):
+        relevant.append('복지문화')
+        relevant.append('문화활동')
+        relevant.append('예술인지원')
 
     # 사용자가 직접 선택한 필요분야
     needs = user_info.get('needs', [])
@@ -181,10 +207,10 @@ def _get_relevant_categories(user_info):
         if need not in relevant:
             relevant.append(need)
 
-    # 기본: 청년이면 일자리/주거
+    # 기본: 청년이면 일자리/주거 + 기본 중분류
     age = user_info.get('age')
     if not relevant and age and 19 <= age <= 39:
-        relevant = ['주거', '일자리', '생활', '취업', '주거지원']
+        relevant = ['주거', '일자리', '복지문화', '취업', '전월세 및 주거급여 지원']
 
     return relevant
 
@@ -265,7 +291,8 @@ def _calc_priority(policy, user_info, relevant_categories):
         cat_lower = cat.lower()
 
         # [2026.01.19 반영] 중분류 매칭 시 가점 상향 (+30)
-        if cat_lower in mclsf:
+        # [2026.01.20 개선] 공백 무시 비교 (예: "주거 급여" vs "주거급여")
+        if cat_lower.replace(" ", "") in mclsf.replace(" ", ""):
             score += 30
 
         # 기존 대분류 매칭 (+20)

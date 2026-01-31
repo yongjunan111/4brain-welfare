@@ -202,8 +202,9 @@ class PolicyTransformer:
 
         try:
             parsed = datetime.strptime(value, '%Y%m%d').date()
-            # 전체 +2년
-            parsed = parsed.replace(year=parsed.year + 2)
+            # 전체 +2년 (단, 2026년 미만인 경우만)
+            if parsed.year < 2026:
+                parsed = parsed.replace(year=parsed.year + 2)
             return parsed
         except ValueError:
             return None
