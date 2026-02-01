@@ -3,6 +3,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { TERMS_OF_SERVICE, PRIVACY_POLICY } from "./termsData";
 
 type TermsModalType = "terms" | "privacy" | null;
@@ -181,9 +183,11 @@ export function TermsAgreementForm() {
                             </button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6">
-                            <div className="prose prose-sm max-w-none whitespace-pre-wrap text-gray-700">
-                                {showModal === "terms" ? TERMS_OF_SERVICE : PRIVACY_POLICY}
-                            </div>
+                            <article className="prose prose-sm max-w-none text-gray-700">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                    {showModal === "terms" ? TERMS_OF_SERVICE : PRIVACY_POLICY}
+                                </ReactMarkdown>
+                            </article>
                         </div>
                         <div className="border-t p-4">
                             <button

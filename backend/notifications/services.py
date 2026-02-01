@@ -3,14 +3,14 @@
 신규 정책 → 매칭 회원 → 이메일 발송
 """
 import logging
-from datetime import datetime
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils import timezone
 from django.db import IntegrityError
 
 from accounts.models import Profile
 from policies.models import Policy
-from policies.services.matching import match_policies
+from policies.services.matching import is_policy_matching_user
 from .models import NotificationLog
 
 logger = logging.getLogger(__name__)
@@ -43,10 +43,9 @@ def notify_matching_users(policy: Policy) -> dict:
                 stats['skipped'] += 1
                 continue
             
-            # 매칭 여부 확인
-            # match_policies는 여러 정책과 매칭하지만, 우리는 특정 정책만 체크
+            # 매칭 여부 확인 (matching.py 공통 함수 사용)
             user_info = profile.to_matching_dict()
-            if not _is_policy_matching(policy, user_info):
+            if not is_policy_matching_user(policy, user_info):
                 stats['skipped'] += 1
                 continue
             
@@ -63,7 +62,7 @@ def notify_matching_users(policy: Policy) -> dict:
                 policy=policy,
                 email=profile.notification_email,
                 status='sent' if success else 'failed',
-                sent_at=datetime.now() if success else None,
+                sent_at=timezone.now() if success else None,
             )
             
             if success:
@@ -81,39 +80,6 @@ def notify_matching_users(policy: Policy) -> dict:
     logger.info(f"[알림] 정책 '{policy.title}' 발송 완료: {stats}")
     return stats
 
-
-def _is_policy_matching(policy: Policy, user_info: dict) -> bool:
-    """
-    특정 정책이 사용자 정보와 매칭되는지 확인
-    matching.py의 필터링 로직 간소화 버전
-    """
-    # 나이 체크
-    user_age = user_info.get('age')
-    if user_age is not None:
-        if policy.age_min and user_age < policy.age_min:
-            return False
-        if policy.age_max and user_age > policy.age_max:
-            return False
-    
-    # 지역 체크 (정책에 지역 제한이 있는 경우)
-    user_residence = user_info.get('residence', '')
-    if policy.district and user_residence:
-        if policy.district not in user_residence and user_residence not in policy.district:
-            return False
-    
-    # 특수조건 체크 (정책이 특수조건 전용인 경우)
-    user_special = user_info.get('special_conditions', [])
-    
-    if policy.is_for_single_parent and '한부모' not in str(user_special):
-        return False
-    if policy.is_for_disabled and '장애' not in str(user_special) and '장애인' not in str(user_special):
-        return False
-    if policy.is_for_low_income and '기초수급' not in str(user_special) and '수급자' not in str(user_special):
-        return False
-    if policy.is_for_newlywed and '신혼' not in str(user_special):
-        return False
-    
-    return True
 
 
 def send_policy_notification(email: str, user_name: str, policy: Policy) -> bool:

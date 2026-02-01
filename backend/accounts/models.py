@@ -207,11 +207,6 @@ def create_user_profile(sender, instance, created, **kwargs):
         Profile.objects.create(user=instance)
 
 
-@receiver(post_save, sender=User)
-def save_user_profile(sender, instance, **kwargs):
-    if hasattr(instance, 'profile'):
-        instance.profile.save()
-
 class Scrap(models.Model):
     """사용자의 관심 정책 스크랩"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='scraps')
