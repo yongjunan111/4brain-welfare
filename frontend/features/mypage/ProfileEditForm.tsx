@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { getMyProfile, saveMyProfile } from "./mypage.api";
+import { useProfileStore } from "@/stores/profile.store";
 import type {
     MyProfile,
     Education,
@@ -99,6 +100,7 @@ export function ProfileEditForm() {
     const [origin, setOrigin] = useState<MyProfile | null>(null);
     const [form, setForm] = useState<MyProfile | null>(null);
     const [saving, setSaving] = useState(false);
+    const updateProfile = useProfileStore((s) => s.updateProfile);
 
     useEffect(() => {
         (async () => {
@@ -134,6 +136,8 @@ export function ProfileEditForm() {
             const latest = await getMyProfile();
             setOrigin(latest);
             setForm(latest);
+            // 전역 store도 업데이트하여 ChatWindow 등에서 반영되도록 함
+            await updateProfile(latest);
         } finally {
             setSaving(false);
         }

@@ -40,7 +40,75 @@ export async function setVerified(): Promise<void> {
     localStorage.setItem(VERIFY_KEY, JSON.stringify(next));
 }
 
+
 export async function clearVerified(): Promise<void> {
     await new Promise((r) => setTimeout(r, 80));
     localStorage.setItem(VERIFY_KEY, JSON.stringify({ isVerified: false }));
+}
+
+// =========================================================================
+// [스크랩 API]
+// =========================================================================
+import { api } from "@/services/axios";
+import { Scrap } from "./mypage.types";
+
+export interface ScrapListResponse {
+    results: {
+        id: number;
+        policy: {
+            plcy_no: string;
+            plcy_nm: string;
+            plcy_expln_cn: string;
+            district: string | null;
+            categories: { id: number; name: string }[];
+        };
+        created_at: string;
+    }[];
+}
+
+/**
+ * ✅ 내 스크랩 목록 조회
+ */
+export async function fetchScraps(): Promise<Scrap[]> {
+    try {
+        const response = await api.get<ScrapListResponse>("/api/accounts/scraps/");
+        return response.data.results.map((item) => ({
+            id: item.id,
+            plcy_no: item.policy.plcy_no,
+            plcy_nm: item.policy.plcy_nm,
+            plcy_expln_cn: item.policy.plcy_expln_cn,
+            district: item.policy.district || "전국",
+            category: item.policy.categories?.[0]?.name || "기타",
+            created_at: item.created_at,
+        }));
+    } catch (error) {
+        console.error("fetchScraps error:", error);
+        return [];
+    }
+}
+
+/**
+ * ✅ 스크랩 추가
+ */
+export async function addScrap(policyId: string): Promise<boolean> {
+    try {
+        await api.post(`/api/accounts/scraps/${policyId}/`);
+        return true;
+    } catch (error) {
+        console.error("addScrap error:", error);
+        return false;
+    }
+}
+
+/**
+ * ✅ 스크랩 삭제
+ */
+export async function removeScrap(policyId: string): Promise<boolean> {
+    try {
+        await api.delete(`/api/accounts/scraps/${policyId}/`);
+        return true;
+    } catch (error) {
+        console.error("removeScrap error:", error);
+        return false;
+    }
 }

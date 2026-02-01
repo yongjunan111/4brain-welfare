@@ -76,3 +76,14 @@ export type VerifyState = {
     isVerified: boolean;
     verifiedAt?: string; // ISO
 };
+
+export interface Scrap {
+    id: number;
+    plcy_no: string;
+    plcy_nm: string;
+    plcy_expln_cn: string;
+    district: string;
+    category: string;
+    created_at: string;
+}
+
