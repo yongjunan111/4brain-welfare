@@ -10,14 +10,12 @@ import { ChatInput } from "./ChatInput";
 
 // 취업상태 라벨 매핑
 const JOB_STATUS_LABELS: Record<string, string> = {
-  none: "제한없음",
-  worker: "재직자",
-  self_employed: "자영업자",
-  unemployed: "미취업자",
+  employed: "재직중",
+  unemployed: "미취업",
+  job_seeking: "구직중",
+  student: "학생",
+  startup: "창업준비",
   freelancer: "프리랜서",
-  daily_worker: "일용근로자",
-  startup_preparing: "(예비)창업자",
-  short_term_worker: "단기근로자",
   other: "기타",
 };
 
@@ -36,14 +34,16 @@ export function ChatWindow() {
   // 소득 표시 포맷팅
   const formatIncome = () => {
     if (!profile) return "-";
-    const { incomeMin, incomeMax } = profile;
-    if (incomeMin == null && incomeMax == null) return "-";
-    if (incomeMin != null && incomeMax != null) {
-      return `${incomeMin}~${incomeMax}만원`;
+    if (profile.incomeAmount != null) {
+      return `월 ${profile.incomeAmount}만원`;
     }
-    if (incomeMin != null) return `${incomeMin}만원 이상`;
-    if (incomeMax != null) return `${incomeMax}만원 이하`;
     return "-";
+  };
+
+  // 나이 계산
+  const getAge = () => {
+    if (!profile || !profile.birthYear) return null;
+    return new Date().getFullYear() - profile.birthYear;
   };
 
   // ✅ ③ 이미지 구조를 단순화한 2컬럼: (왼쪽 요약) + (오른쪽 대화)
@@ -55,11 +55,11 @@ export function ChatWindow() {
         <div className="mt-3 space-y-2 text-xs text-gray-700">
           <Row
             label="나이"
-            value={profile?.age != null ? `만 ${profile.age}세` : "-"}
+            value={getAge() != null ? `만 ${getAge()}세` : "-"}
           />
           <Row
             label="거주지"
-            value={profile?.interestDistrict || "-"}
+            value={profile?.district || "-"}
           />
           <Row
             label="구직/재직"
@@ -102,4 +102,3 @@ function Row({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

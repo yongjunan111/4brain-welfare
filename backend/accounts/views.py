@@ -22,6 +22,17 @@ class SignupView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        
+        # 정책 알림 동의 정보를 Profile에 저장
+        email_notification_enabled = request.data.get('email_notification_enabled', False)
+        notification_email = request.data.get('notification_email', '')
+        
+        if email_notification_enabled:
+            profile = user.profile  # Profile은 signal로 자동 생성됨
+            profile.email_notification_enabled = True
+            profile.notification_email = notification_email or user.email
+            profile.save()
+        
         return Response(
             {
                 "message": "회원가입이 완료되었습니다.",
@@ -85,7 +96,9 @@ class ProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = ProfileSerializer
     
     def get_object(self):
-        return self.request.user.profile
+        # Profile이 없는 기존 유저의 경우 자동 생성
+        profile, created = Profile.objects.get_or_create(user=self.request.user)
+        return profile
 
 class ScrapListView(generics.ListAPIView):
     """내 스크랩 목록"""

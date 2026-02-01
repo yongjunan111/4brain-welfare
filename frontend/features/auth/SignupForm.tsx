@@ -183,6 +183,9 @@ export function SignupForm() {
         email: combinedEmail || undefined,
         password,
         password2,
+        // 정책 알림 동의 정보 추가
+        email_notification_enabled: agreeNotification,
+        notification_email: agreeNotification && combinedEmail ? combinedEmail : undefined,
       });
 
       // 회원가입 성공 → 로그인 페이지로 이동

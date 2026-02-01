@@ -35,6 +35,10 @@ export const useAuthStore = create<AuthState>()(
         },
 
         login: (tokens: AuthTokens) => {
+            // 이전 사용자 프로필 초기화
+            localStorage.removeItem("welfarecompass:mypage_profile");
+            localStorage.removeItem("welfarecompass:verify_state");
+
             localStorage.setItem("access_token", tokens.access);
             localStorage.setItem("refresh_token", tokens.refresh);
             set({ isAuthenticated: true });
@@ -43,6 +47,9 @@ export const useAuthStore = create<AuthState>()(
         logout: () => {
             localStorage.removeItem("access_token");
             localStorage.removeItem("refresh_token");
+            // 프로필 데이터도 함께 삭제
+            localStorage.removeItem("welfarecompass:mypage_profile");
+            localStorage.removeItem("welfarecompass:verify_state");
             set({ isAuthenticated: false });
         },
     }))

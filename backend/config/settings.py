@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'accounts',
     'chat',
     'etl',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -155,3 +156,18 @@ CORS_ALLOW_CREDENTIALS = True
 
 # 온통청년 API
 YOUTH_API_KEY = os.getenv('YOUTH_API_KEY', '')
+
+# # Email settings
+# # 개발환경: 콘솔 출력, 프로덕션: Gmail SMTP
+# if DEBUG:
+#     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# else:
+# Gmail SMTP 사용 (DEBUG 모드에서도 실제 발송)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+
+DEFAULT_FROM_EMAIL = '복지나침반 <welfarecompass.dev@gmail.com>'
