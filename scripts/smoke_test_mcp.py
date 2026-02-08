@@ -3,8 +3,35 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
+
+
+def _unwrap_mcp_result(value):
+    """langchain_mcp_adapters 결과를 기본 파이썬 타입으로 변환."""
+    if isinstance(value, list):
+        text_chunks = []
+        for item in value:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    text_chunks.append(text)
+            elif isinstance(item, str):
+                text_chunks.append(item)
+
+        if not text_chunks:
+            return value
+
+        joined = "\n".join(chunk for chunk in text_chunks if chunk).strip()
+        if not joined:
+            return ""
+        try:
+            return json.loads(joined)
+        except json.JSONDecodeError:
+            return joined
+
+    return value
 
 
 async def main() -> int:
@@ -41,14 +68,21 @@ async def main() -> int:
             print("필수 MCP 도구(rewrite_query/search_policies/rag_pipeline) 누락")
             return 1
 
-        rewritten = await rewrite.ainvoke({"query": "월세 도와줘"})
+        rewritten_raw = await rewrite.ainvoke({"query": "월세 도와줘"})
+        rewritten = _unwrap_mcp_result(rewritten_raw)
+        if not isinstance(rewritten, str):
+            rewritten = str(rewritten)
         print(f"rewrite_query -> {rewritten}")
 
-        search_result = await search.ainvoke({"query": rewritten, "top_k": 3})
-        print(f"search_policies -> {len(search_result)}건")
+        search_raw = await search.ainvoke({"query": rewritten, "top_k": 3})
+        search_result = _unwrap_mcp_result(search_raw)
+        search_count = len(search_result) if isinstance(search_result, list) else 0
+        print(f"search_policies -> {search_count}건")
 
-        rag_result = await rag.ainvoke({"query": "청년 취업 지원", "top_k": 3})
-        print(f"rag_pipeline -> {rag_result.get('result_count', 0)}건")
+        rag_raw = await rag.ainvoke({"query": "청년 취업 지원", "top_k": 3})
+        rag_result = _unwrap_mcp_result(rag_raw)
+        rag_count = rag_result.get("result_count", 0) if isinstance(rag_result, dict) else 0
+        print(f"rag_pipeline -> {rag_count}건")
 
         print("MCP 스모크 테스트 성공")
         return 0
