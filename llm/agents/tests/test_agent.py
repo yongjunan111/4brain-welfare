@@ -178,15 +178,23 @@ class TestTools:
         assert "age" in result
         assert "interests" in result
     
-    def test_rewrite_query_stub(self):
-        """rewrite_query stub 반환값 확인"""
+    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
+    def test_rewrite_query_stub(self, mock_llm):
+        """rewrite_query 반환값 확인"""
         from llm.agents.tools import rewrite_query
-        
+        import json
+
+        # Mock LLM 응답
+        mock_llm.return_value = json.dumps({
+            "bm25_query": "청년 월세 지원 주거 보조금",
+            "intent_keywords": ["월세", "지원"],
+            "detected_pattern": "easy"
+        })
+
         result = rewrite_query.invoke("월세 도움 받을 수 있어?")
-        
+
         assert isinstance(result, str)
-        # stub은 원본 그대로 반환
-        assert result == "월세 도움 받을 수 있어?"
+        assert result == "청년 월세 지원 주거 보조금"
     
     def test_search_policies(self):
         """search_policies 반환값 확인"""
