@@ -36,6 +36,35 @@ AGE_RULES = [
 DEFAULT_MIN_AGE = 0
 DEFAULT_MAX_AGE = 99
 
+# 서울 25개 구 zipCd → 한글 매핑
+ZIPCD_TO_DISTRICT = {
+    '11110': '종로구',
+    '11140': '중구',
+    '11170': '용산구',
+    '11200': '성동구',
+    '11215': '광진구',
+    '11230': '동대문구',
+    '11260': '중랑구',
+    '11290': '성북구',
+    '11305': '강북구',
+    '11320': '도봉구',
+    '11350': '노원구',
+    '11380': '은평구',
+    '11410': '서대문구',
+    '11440': '마포구',
+    '11470': '양천구',
+    '11500': '강서구',
+    '11530': '구로구',
+    '11545': '금천구',
+    '11560': '영등포구',
+    '11590': '동작구',
+    '11620': '관악구',
+    '11650': '서초구',
+    '11680': '강남구',
+    '11710': '송파구',
+    '11740': '강동구',
+}
+
 
 @dataclass
 class TransformedPolicy:
@@ -123,7 +152,7 @@ class PolicyTransformer:
             apply_method=normalized_apply_method,  # [RENAME] plcy_aply_mthd_cn → apply_method
             apply_url=raw.get('aplyUrlAddr', ''),  # [RENAME] aply_url_addr → apply_url
 
-            district=self._parse_district(raw.get('rgtrInstCdNm', '')),
+            district=self._parse_district(raw.get('zipCd', ''), raw.get('rgtrInstCdNm', '')),
 
             category=raw.get('lclsfNm', '').strip(),  # [RENAME] lclsf_nm → category (대분류)
             subcategory=raw.get('mclsfNm', '').strip(),  # [RENAME] mclsf_nm → subcategory (중분류)
@@ -272,24 +301,30 @@ class PolicyTransformer:
         except ValueError:
             return None
 
-    def _parse_district(self, value: str) -> Optional[str]:
+    def _parse_district(self, zip_cd: str, rgtr_inst: str) -> Optional[str]:
         """
-        서울특별시 은평구 → 은평구
+        zipCd 코드 → 한글 구 이름 변환.
 
-        정책 등록기관명이 들어오는 경우가 있어, 구 단위만 저장하도록 필터링
-        (예: "과학기술정보통신부 ..." → None)
+        1순위: zipCd로 매핑 (11380 → 은평구)
+        2순위: rgtrInstCdNm fallback (서울특별시 은평구 → 은평구)
+        - 11000(서울시 전체), 쉼표 다중 코드 → None (구 제한 없음)
         """
-        if not value or value == '서울특별시':
+        # 1순위: zipCd
+        if zip_cd:
+            # 쉼표로 여러 코드 → 광역(구 제한 없음)
+            if ',' in zip_cd:
+                return None
+            district = ZIPCD_TO_DISTRICT.get(zip_cd.strip())
+            if district:
+                return district
+            # 11000(서울시 전체) 또는 매핑 없는 코드 → None
             return None
 
-        # "서울특별시 ○○구" 형태면 구만 추출
-        if value.startswith('서울특별시 '):
-            candidate = value.replace('서울특별시 ', '')
-        else:
-            candidate = value
-
-        # 구 단위만 허용 (기타 기관명/중앙부처는 None)
-        if candidate.endswith('구') and len(candidate) <= 20:
-            return candidate
-
+        # 2순위: rgtrInstCdNm fallback
+        if not rgtr_inst or rgtr_inst == '서울특별시':
+            return None
+        if rgtr_inst.startswith('서울특별시 '):
+            candidate = rgtr_inst.replace('서울특별시 ', '')
+            if candidate.endswith('구'):
+                return candidate
         return None
