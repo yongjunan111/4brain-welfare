@@ -3,7 +3,7 @@
 
 정제 규칙:
 1. 나이: 빈 값 → 키워드 기반 추론 → 기본값 19-39, 0은 유지
-2. 신청기간: 전체 +2년 변환
+2. 신청기간: 2024년은 +2년, 2025년은 +1년 보정
 3. 카테고리: 대분류 5개 + 중분류 보존
 """
 
@@ -57,7 +57,7 @@ class TransformedPolicy:
     employment_status: str  # [RENAME] job_cd → employment_status
     education_status: str  # [RENAME] school_cd → education_status
 
-    # 신청기간 (2024→2026 변환 적용)
+    # 신청기간 연도 보정 적용 (2024:+2, 2025:+1)
     apply_start_date: Optional[date]  # [RENAME] aply_start_dt → apply_start_date
     apply_end_date: Optional[date]  # [RENAME] aply_end_dt → apply_end_date
     business_start_date: Optional[date]  # [RENAME] biz_prd_bgng_ymd → business_start_date
@@ -91,14 +91,19 @@ class PolicyTransformer:
             policy_name
         )
 
-        # 신청기간 정제: 2024 → 2026 변환
+        # 신청기간 정제: 연도 보정 (2024:+2, 2025:+1)
         aply_start, aply_end = self._parse_date_range_with_year_fix(raw.get('aplyYmd', ''))
+
+        normalized_title = self._normalize_text_years(raw.get('plcyNm', ''))
+        normalized_description = self._normalize_text_years(raw.get('plcyExplnCn', ''))
+        normalized_support_content = self._normalize_text_years(raw.get('plcySprtCn', ''))
+        normalized_apply_method = self._normalize_text_years(raw.get('plcyAplyMthdCn', ''))
 
         return TransformedPolicy(
             policy_id=raw['plcyNo'],  # [RENAME] plcy_no → policy_id
-            title=raw.get('plcyNm', ''),  # [RENAME] plcy_nm → title
-            description=raw.get('plcyExplnCn', ''),  # [RENAME] plcy_expln_cn → description
-            support_content=raw.get('plcySprtCn', ''),  # [RENAME] plcy_sprt_cn → support_content
+            title=normalized_title,  # [RENAME] plcy_nm → title
+            description=normalized_description,  # [RENAME] plcy_expln_cn → description
+            support_content=normalized_support_content,  # [RENAME] plcy_sprt_cn → support_content
 
             age_min=min_age,  # [RENAME] sprt_trgt_min_age → age_min
             age_max=max_age,  # [RENAME] sprt_trgt_max_age → age_max
@@ -115,7 +120,7 @@ class PolicyTransformer:
             business_start_date=self._parse_date_with_year_fix(raw.get('bizPrdBgngYmd')),  # [RENAME] biz_prd_bgng_ymd → business_start_date
             business_end_date=self._parse_date_with_year_fix(raw.get('bizPrdEndYmd')),  # [RENAME] biz_prd_end_ymd → business_end_date
 
-            apply_method=raw.get('plcyAplyMthdCn', ''),  # [RENAME] plcy_aply_mthd_cn → apply_method
+            apply_method=normalized_apply_method,  # [RENAME] plcy_aply_mthd_cn → apply_method
             apply_url=raw.get('aplyUrlAddr', ''),  # [RENAME] aply_url_addr → apply_url
 
             district=self._parse_district(raw.get('rgtrInstCdNm', '')),
@@ -192,28 +197,31 @@ class PolicyTransformer:
 
     def _parse_date_with_year_fix(self, value: str) -> Optional[date]:
         """
-        날짜 정제 + 전체 +2년 변환
+        날짜 정제 + 연도 보정
 
         예: "20240916" → date(2026, 9, 16)
-            "20250630" → date(2027, 6, 30)
+            "20250630" → date(2026, 6, 30)
+            "20260101" → date(2026, 1, 1)
         """
         if not value or len(value) != 8:
             return None
 
         try:
             parsed = datetime.strptime(value, '%Y%m%d').date()
-            # 전체 +2년 (단, 2026년 미만인 경우만)
-            if parsed.year < 2026:
+            # 회의 결정 반영: 2024는 +2년, 2025는 +1년
+            if parsed.year == 2024:
                 parsed = parsed.replace(year=parsed.year + 2)
+            elif parsed.year == 2025:
+                parsed = parsed.replace(year=parsed.year + 1)
             return parsed
         except ValueError:
             return None
 
     def _parse_date_range_with_year_fix(self, value: str) -> tuple[Optional[date], Optional[date]]:
         """
-        날짜 범위 정제 + 전체 +2년 변환
+        날짜 범위 정제 + 연도 보정
 
-        예: "20240916 ~ 20251231" → (date(2026,9,16), date(2027,12,31))
+        예: "20240916 ~ 20251231" → (date(2026,9,16), date(2026,12,31))
         """
         if not value or '~' not in value:
             return None, None
@@ -237,6 +245,19 @@ class PolicyTransformer:
             return int(value)
         except (ValueError, TypeError):
             return None
+
+    def _normalize_text_years(self, value: str) -> str:
+        """
+        텍스트에 포함된 연도 표기를 운영 연도 기준으로 보정.
+        - 2024 -> 2026
+        - 2025 -> 2026
+        """
+        if not value:
+            return ''
+
+        normalized = re.sub(r'(?<!\d)2024(?!\d)', '2026', value)
+        normalized = re.sub(r'(?<!\d)2025(?!\d)', '2026', normalized)
+        return normalized
 
     def _parse_datetime(self, value: str) -> Optional[datetime]:
         if not value:
