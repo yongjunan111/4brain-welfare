@@ -16,12 +16,32 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-
+from django.http import HttpResponseRedirect
+from django.conf import settings
+from accounts.views import GoogleLogin, FindUsernameView, PasswordResetConfirmRedirectView, AxesLockedLoginView, CustomPasswordResetView, clean_logout
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('policies.urls')),
-    path('api/accounts/', include('accounts.urls')),
+    path('api/policies/', include('policies.urls')), # 'api/' 중복 제거 (include 안에서 처리하는지 확인 필요하나 기존 유지)
+    path('api/accounts/', include('accounts.urls')), # 기존 커스텀 (유지)
+    
+    # dj-rest-auth & allauth
+    path('api/auth/login/', AxesLockedLoginView.as_view(), name='rest_login'),  # 계정 잠금 체크 포함
+    path('api/auth/logout/', clean_logout, name='rest_logout'),   # [보안] 쿠키 완전 삭제 (순수 Django 함수형 뷰)
+    path('api/auth/password/reset/', CustomPasswordResetView.as_view(), name='rest_password_reset'), # [커스텀] 이메일 존재 여부 확인
+    path('api/auth/', include('dj_rest_auth.urls')),  # 위에서 login/logout/password/reset 오버라이드 후 나머지
+    path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
+    path('api/auth/google/login/', GoogleLogin.as_view(), name='google_login'),
+    path('api/auth/find/username/', FindUsernameView.as_view(), name='find_username'), # [이동] 일관성을 위해 auth 경로로 이동
+    
+    # 비밀번호 재설정 이메일 링크 리다이렉트 (Backend -> Frontend)
+    path('password-reset/confirm/<uidb64>/<token>/', PasswordResetConfirmRedirectView.as_view(), name='password_reset_confirm'),
+    
+    # [FIX] Google Login 시 allauth가 내부적으로 'account_signup'을 찾음 (사용하지 않더라도 선언 필요)
+    path('api/auth/dummy-signup/', lambda request: HttpResponseRedirect(settings.FRONTEND_URL + '/signup'), name='account_signup'),
+    path('api/auth/dummy-password/reset/', lambda request: HttpResponseRedirect(settings.FRONTEND_URL + '/login'), name='account_reset_password'),
+    path('api/auth/dummy-email/', lambda request: HttpResponseRedirect(settings.FRONTEND_URL + '/profile'), name='account_email'),
+    # path('api/auth/google/', include('allauth.socialaccount.providers.google.urls')), # (필요 시 유지, REST에서는 위 View 사용)
+
     path('api/v1/chat/', include('chat.urls')),  # [BRAIN4-20] Chat API
 ]
-

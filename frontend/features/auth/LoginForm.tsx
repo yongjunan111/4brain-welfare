@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "./auth.api";
 import { useAuthStore } from "@/stores/auth.store";
+import GoogleLoginButton from "./components/GoogleLoginButton";
 
 /**
  * LoginForm
@@ -27,10 +28,10 @@ export function LoginForm() {
     try {
       setLoading(true);
 
-      const tokens = await login({ username, password });
+      await login({ username, password });
 
-      // ✅ auth store를 통해 토큰 저장 및 인증 상태 업데이트
-      authLogin(tokens);
+      // ✅ 쿠키 검증 후 인증 상태 확정 (보수적 업데이트)
+      await authLogin();
 
       // 로그인 성공 후 메인 페이지로 이동
       router.push("/");
@@ -45,9 +46,15 @@ export function LoginForm() {
           setError("❌ 아이디 또는 비밀번호가 일치하지 않습니다.");
         }
       } else if (err.response?.status === 400) {
-        setError("❌ 입력 정보를 다시 확인해주세요.");
+        const data = err.response?.data;
+        if (data && data.non_field_errors) {
+          // dj-rest-auth는 잘못된 로그인 자격증명에 400 + non_field_errors를 반환함
+          setError("❌ 아이디 또는 비밀번호가 일치하지 않습니다.");
+        } else {
+          setError("❌ 입력 정보를 다시 확인해주세요.");
+        }
       } else {
-        setError("❌ 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.");
+        setError("❌ 로그인에 실패했습니다. 5분 후 다시 시도해주세요.");
       }
     } finally {
       setLoading(false);
@@ -89,9 +96,23 @@ export function LoginForm() {
         {loading ? "처리 중..." : "로그인"}
       </button>
 
-      <p className="text-xs text-gray-500">
-        아직 계정이 없나요? <a className="underline" href="/signup">회원가입</a>
-      </p>
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-gray-300" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-white px-2 text-gray-500">Or continue with</span>
+        </div>
+      </div>
+
+      <GoogleLoginButton />
+
+      <div className="flex justify-between items-center text-xs text-gray-500 mt-4">
+        <a className="hover:underline" href="/auth/find">아이디/비밀번호 찾기</a>
+        <p>
+          아직 계정이 없나요? <a className="underline font-medium ml-1" href="/signup">회원가입</a>
+        </p>
+      </div>
     </form>
   );
 }

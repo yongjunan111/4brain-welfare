@@ -25,10 +25,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-3j1l32t$i3@)&i%26tig=dhny5_b(q^foy)k%!()))nkim&00f'
+# [보안] 운영 환경에서는 반드시 DJANGO_SECRET_KEY 환경변수를 설정하세요.
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-do-not-use-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# [보안] 기본값 False: 운영 환경에서 환경변수 누락 시 안전하게 기동
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('true', '1', 'yes')
+
+# [보안] 운영 환경 안전장치: insecure 키로 운영 서버가 기동되는 것을 차단
+if not DEBUG and 'insecure' in SECRET_KEY:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        "운영 환경(DEBUG=False)에서는 안전한 DJANGO_SECRET_KEY 환경변수를 반드시 설정하세요."
+    )
 
 ALLOWED_HOSTS = []
 
@@ -43,8 +52,17 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
+    'django.contrib.sites',  # allauth 필수
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
+
     'django_filters',
     'rest_framework',
+    'rest_framework.authtoken', # dj-rest-auth 필수
     'rest_framework_simplejwt',
     'django_q',  # 비동기 태스크 큐
     'policies',
@@ -52,6 +70,7 @@ INSTALLED_APPS = [
     'chat',
     'etl',
     'notifications',
+    'axes',  # 계정 잠금 (로그인 실패 제한)
 ]
 
 MIDDLEWARE = [
@@ -63,6 +82,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
+    'axes.middleware.AxesMiddleware',  # 계정 잠금 미들웨어 (맨 뒤)
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -91,11 +112,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'welfare',
-        'USER': 'welfare_user',
-        'PASSWORD': 'welfare1234',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.environ.get('DB_NAME', 'welfare'),
+        'USER': os.environ.get('DB_USER', 'welfare_user'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'welfare1234'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
     }
 }
 
@@ -143,10 +164,27 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'accounts.authentication.CookieJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
+    'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20
+    'PAGE_SIZE': 12,
+}
+
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
+    'AUTH_COOKIE': 'access_token',         # 쿠키 이름
+    'AUTH_COOKIE_REFRESH': 'refresh_token', # refresh 쿠키 이름 통일
+    'AUTH_COOKIE_DOMAIN': None,
+    'AUTH_COOKIE_SECURE': not DEBUG,        # HTTPS 배포 시 True
+    'AUTH_COOKIE_HTTP_ONLY': True,
+    'AUTH_COOKIE_PATH': '/',               # [보안] 모든 refresh_token 쿠키를 / path로 통일
+    'AUTH_COOKIE_SAMESITE': 'Lax',         # [보안] Strict → Lax 통일 (cross-origin 리다이렉트 지원)
 }
 
 # CORS settings
@@ -154,6 +192,16 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+# CSRF Settings
+CSRF_COOKIE_HTTPONLY = False  # 클라이언트(JS)에서 쿠키 읽기 허용 (X-CSRFToken 헤더 전송용)
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+]
+
+# Frontend URL (for email links)
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 # 온통청년 API
 YOUTH_API_KEY = os.getenv('YOUTH_API_KEY', '')
@@ -182,4 +230,92 @@ Q_CLUSTER = {
     'queue_limit': 50,
     'bulk': 10,
     'orm': 'default',  # 기존 PostgreSQL DB 사용
+}
+
+
+# Django Allauth & dj-rest-auth Settings
+SITE_ID = 1
+
+AUTHENTICATION_BACKENDS = (
+    'axes.backends.AxesBackend',  # django-axes (맨 앞, 잠금 여부 먼저 확인)
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+)
+
+# Custom Adapter 설정
+ACCOUNT_ADAPTER = 'accounts.adapters.CustomAccountAdapter'
+
+# dj-rest-auth 설정
+REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_COOKIE': 'access_token',
+    'JWT_AUTH_REFRESH_COOKIE': 'refresh_token',
+    'JWT_AUTH_HTTPONLY': True,
+    'JWT_AUTH_SECURE': not DEBUG, # 배포 시 True로 변경 (HTTPS)
+    'JWT_AUTH_SAMESITE': 'Lax',
+    'USER_DETAILS_SERIALIZER': 'accounts.serializers.UserSerializer', # [TODO] 나중에 CustomUserDetailsSerializer로 변경
+    'REGISTER_SERIALIZER': 'accounts.serializers.CustomRegisterSerializer',
+}
+
+# Google OAuth 설정
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': os.environ.get('GOOGLE_CLIENT_ID'),
+            'secret': os.environ.get('GOOGLE_CLIENT_SECRET'),
+            'key': ''
+        },
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        }
+    }
+}
+
+# 1. 이메일 인증
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'  # 이메일 인증 필수 ('optional', 'none', 'mandatory')
+ACCOUNT_EMAIL_REQUIRED = True # [TODO] Deprecated, remove later if ACCOUNT_SIGNUP_FIELDS works well
+ACCOUNT_CONFIRM_EMAIL_ON_GET = True # 이메일 링크 클릭 시 바로 인증 완료 (GET 요청 허용)
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 1 # 인증 링크 유효기간 1일
+
+# [추가] 소셜 로그인 시 기존 이메일 계정과 자동 연결 허용
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
+
+# 2. 계정 잠금 (django-axes)
+# allauth의 ACCOUNT_RATE_LIMITS는 dj-rest-auth 엔드포인트에 미적용되므로,
+# 인증 백엔드 레벨에서 동작하는 django-axes를 사용합니다.
+AXES_FAILURE_LIMIT = 5                          # 5회 실패 시 차단
+AXES_COOLOFF_TIME = timedelta(minutes=5)        # 5분 후 자동 해제
+AXES_LOCKOUT_PARAMETERS = ['username']          # username 기준 잠금 (IP 아닌 계정 단위)
+AXES_RESET_ON_SUCCESS = True                    # 로그인 성공 시 실패 횟수 초기화
+
+# Logging Configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'accounts': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
 }

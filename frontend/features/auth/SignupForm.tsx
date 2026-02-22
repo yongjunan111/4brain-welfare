@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signup } from "./auth.api";
 import { api } from "@/services/axios";
+import GoogleLoginButton from "./components/GoogleLoginButton";
 
 /**
  * SignupForm
@@ -81,13 +82,24 @@ export function SignupForm() {
 
   const passwordValidation = validatePassword(password);
 
+  const USERNAME_REGEX = /^[a-z0-9_-]{4,20}$/;
+
   // ✅ 실시간 아이디 중복 확인 (debounce)
   const checkUsername = useCallback(async (value: string) => {
-    if (value.length < 3) {
+    if (value.length < 4) {
       setUsernameStatus({
         checking: false,
         available: null,
-        message: value.length > 0 ? "3자 이상 입력해주세요." : "",
+        message: value.length > 0 ? "4자 이상 입력해주세요." : "",
+      });
+      return;
+    }
+
+    if (!USERNAME_REGEX.test(value)) {
+      setUsernameStatus({
+        checking: false,
+        available: false,
+        message: "영문 소문자, 숫자, _(언더바), -(하이픈)만 사용 가능합니다.",
       });
       return;
     }
@@ -142,7 +154,13 @@ export function SignupForm() {
     e.preventDefault();
     setFieldErrors({}); // 초기화
 
-    // 1️⃣ 아이디 중복 확인
+    // 1️⃣ 아이디 형식 검증
+    if (!USERNAME_REGEX.test(username)) {
+      setFieldErrors((prev) => ({ ...prev, username: "❌ 아이디는 4~20자의 영문 소문자, 숫자, _(언더바), -(하이픈)만 사용 가능합니다." }));
+      return;
+    }
+
+    // 2️⃣ 아이디 중복 확인
     if (!usernameStatus.available) {
       setFieldErrors((prev) => ({ ...prev, username: "❌ 아이디 중복 확인을 해주세요." }));
       return;
@@ -181,16 +199,15 @@ export function SignupForm() {
       await signup({
         username,
         email: combinedEmail || undefined,
-        password,
+        password1: password, // dj-rest-auth requires password1
         password2,
         // 정책 알림 동의 정보 추가
-        email_notification_enabled: agreeNotification,
+        email_notification_consent: agreeNotification,
         notification_email: agreeNotification && combinedEmail ? combinedEmail : undefined,
       });
 
-      // 회원가입 성공 → 로그인 페이지로 이동
-      alert("회원가입이 완료되었습니다! 로그인해주세요.");
-      router.push("/login");
+      // 회원가입 성공 → 이메일 확인 페이지로 이동
+      router.push("/auth/verify-email");
     } catch (err: any) {
       const errorData = err.response?.data;
 
@@ -216,12 +233,18 @@ export function SignupForm() {
 
         // 2. Email Error
         if (errorData.email) {
-          newErrors.email = `❌ ${errorData.email[0]}`;
+          const msg = errorData.email[0];
+          if (msg.includes("already exists") || msg.includes("이미 가입된")) {
+            newErrors.email = "❌ 이미 가입된 이메일입니다.";
+          } else {
+            newErrors.email = `❌ ${msg}`;
+          }
         }
 
-        // 3. Password Error
-        if (errorData.password) {
-          let msg = errorData.password[0];
+        // 3. Password Error (password1 확인)
+        const passwordError = errorData.password1 || errorData.password;
+        if (passwordError) {
+          let msg = passwordError[0];
           if (msg.includes("too common")) msg = "❌ 너무 쉬운 비밀번호입니다.";
           else if (msg.includes("too short")) msg = "❌ 8자 이상이어야 합니다.";
           else if (msg.includes("numeric")) msg = "❌ 숫자로만 구성될 수 없습니다.";
@@ -269,8 +292,9 @@ export function SignupForm() {
             }`}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="username (3자 이상)"
+          // placeholder="4~20자, 영문 소문자/숫자/_/-"
           required
+          maxLength={20}
         />
         {/* ✅ 실시간 아이디 중복 확인 메시지 */}
         {usernameStatus.message && (
@@ -294,7 +318,7 @@ export function SignupForm() {
 
       <div className="space-y-2">
         <label className="text-sm">
-          이메일 {agreeNotification ? <span className="text-red-500">(필수)</span> : "(선택)"}
+          이메일
         </label>
         <div className="flex items-center gap-1">
           <input
@@ -302,7 +326,7 @@ export function SignupForm() {
             value={emailId}
             onChange={(e) => setEmailId(e.target.value)}
             placeholder="example"
-            required={agreeNotification}
+            required
           />
           <span className="text-gray-500">@</span>
 
@@ -341,7 +365,7 @@ export function SignupForm() {
             onChange={(e) => setAgreeNotification(e.target.checked)}
           />
           <label htmlFor="policy-noti" className="text-xs text-gray-700 select-none cursor-pointer">
-            정책정보 알림 수신 동의 (이메일 필수 입력)
+            정책정보 알림 수신 동의
           </label>
         </div>
       </div>
@@ -413,6 +437,17 @@ export function SignupForm() {
       >
         {loading ? "처리 중..." : "회원가입"}
       </button>
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-gray-300" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-white px-2 text-gray-500">Or sign up with</span>
+        </div>
+      </div>
+
+      <GoogleLoginButton />
 
       <p className="text-xs text-gray-500">
         이미 계정이 있나요? <a className="underline" href="/login">로그인</a>
