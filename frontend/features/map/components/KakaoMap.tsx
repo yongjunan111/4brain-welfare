@@ -46,10 +46,6 @@ export function KakaoMap({
             {/* 내 위치 (센터) 표시 - 선택사항 */}
             <MapMarker
                 position={center}
-                image={{
-                    src: "/images/marker/my_location.png", // 없으면 기본 마커 사용됨 (아이콘 지정 안하면 됨)
-                    size: { width: 24, height: 24 },
-                }}
                 title="현재 위치"
             />
 

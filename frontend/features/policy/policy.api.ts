@@ -7,6 +7,7 @@ export type PolicySearchParams = {
   category?: PolicyCategory | "all";
   region?: string;
   page?: number;
+  page_size?: number;
 };
 
 // 백엔드 응답 타입
@@ -46,18 +47,27 @@ interface BackendPolicy {
 // 백엔드 → 프론트엔드 Policy 변환 (목록용)
 function toPolicy(bp: BackendPolicy): Policy {
   const categoryMap: Record<string, PolicyCategory> = {
-    "주거": "housing",
-    "금융": "finance",
     "일자리": "job",
-    "창업": "entrepreneurship",
-    "정신건강": "mental-health",
-    "정서": "emotional-wellbeing",
-    "보호": "care-protection",
-    "복지": "care-protection",
+    "주거": "housing",
+    "교육": "education",
+    "복지문화": "welfare",
+    "참여권리": "participation",
+    // Fallbacks for safety or old data
+    "금융": "welfare",
+    "창업": "job",
+    "복지": "welfare",
+    "문화": "welfare",
   };
 
-  const backendCategory = bp.categories?.[0]?.name ?? "";
-  const category: PolicyCategory = categoryMap[backendCategory] || "care-protection";
+  const categories: PolicyCategory[] = (bp.categories || [])
+    .map((c) => categoryMap[c.name] || "welfare")
+    .filter((c, i, arr) => arr.indexOf(c) === i); // 중복 제거
+
+  if (categories.length === 0) {
+    categories.push("welfare");
+  }
+
+  const category = categories[0];
 
   let period = "상시";
   if (bp.aply_start_dt && bp.aply_end_dt) {
@@ -71,6 +81,7 @@ function toPolicy(bp: BackendPolicy): Policy {
     title: bp.plcy_nm,
     summary: bp.plcy_expln_cn?.slice(0, 100) ?? "정책 설명이 없습니다.",
     category,
+    categories, // ✅ 다중 카테고리
     region: bp.district || "전국",
     target: `${bp.sprt_trgt_min_age ?? ""}~${bp.sprt_trgt_max_age ?? ""}세` || "전 연령",
     period,
@@ -121,6 +132,7 @@ function toCardItem(p: Policy): PolicyCardItem {
     summary: p.summary,
     region: p.region,
     category: p.category,
+    categories: p.categories, // ✅ 다중 카테고리 전달
     isPriority: p.isPriority,
     content: p.content,
   };
@@ -142,7 +154,7 @@ export async function fetchPolicies(
         category: params?.category === "all" ? undefined : params?.category,
         region: params?.region,
         page: params?.page || 1,
-        page_size: 12, // ✅ 한 페이지당 12개 고정
+        page_size: params?.page_size || 12, // ✅ 페이지 크기 파라미터 적용
       },
     });
 
@@ -241,7 +253,9 @@ interface RecommendedPoliciesResponse {
 export type RecommendedPolicyParams = {
   category?: string;
   exclude?: string[];  // 제외할 정책 ID 배열
-  limit?: number;      // 최대 20
+  limit?: number;      // (deprecated) -> page_size로 대체
+  page?: number;       // 페이지 번호
+  page_size?: number;  // 페이지당 개수
 };
 
 /**
@@ -250,6 +264,7 @@ export type RecommendedPolicyParams = {
  * 백엔드: GET /api/policies/recommended/
  * - 사용자 프로필 기반 매칭 점수 계산
  * - 인증 토큰 필요 (axios interceptor에서 자동 주입)
+ * - [BRAIN4-35] 서버 사이드 페이지네이션 지원
  */
 export async function fetchRecommendedPolicies(
   params?: RecommendedPolicyParams
@@ -265,7 +280,8 @@ export async function fetchRecommendedPolicies(
         params: {
           category: params?.category,
           exclude: params?.exclude?.join(","),
-          limit: params?.limit || 10,
+          page: params?.page || 1,
+          page_size: params?.page_size || params?.limit || 12, // limit 호환성
         },
       }
     );

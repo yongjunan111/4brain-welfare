@@ -144,3 +144,23 @@ class CalendarEventSerializer(serializers.ModelSerializer):
         if obj.business_end_date:
             return obj.business_end_date.strftime('%Y%m%d')
         return None
+
+from .models import MapPOI
+
+class MapPOISerializer(serializers.ModelSerializer):
+    """지도 POI Serializer"""
+    theme_name = serializers.CharField(source='theme.name', read_only=True)
+
+    class Meta:
+        model = MapPOI
+        fields = [
+            'id', 
+            'theme',
+            'theme_name',
+            'name', 
+            'latitude', 
+            'longitude', 
+            'address', 
+            'phone', 
+            'detail_url'
+        ]

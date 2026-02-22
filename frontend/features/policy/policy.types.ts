@@ -1,13 +1,11 @@
 // features/policy/policy.types.ts
 
 export type PolicyCategory =
-  | "housing"
-  | "finance"
   | "job"
-  | "entrepreneurship"
-  | "mental-health"
-  | "emotional-wellbeing"
-  | "care-protection";
+  | "housing"
+  | "education"
+  | "welfare"
+  | "participation";
 
 // 목록/카드용 간략 타입
 export type Policy = {
@@ -15,6 +13,7 @@ export type Policy = {
   title: string;
   summary: string;
   category: PolicyCategory;
+  categories: PolicyCategory[]; // ✅ 다중 카테고리 지원
   region: string;
   target: string;
   period: string;
@@ -66,4 +65,4 @@ export type PolicyDetail = {
 };
 
 // ✅ 카드(UI)에 필요한 최소 필드만 뽑은 타입
-export type PolicyCardItem = Pick<Policy, "id" | "title" | "summary" | "region" | "category" | "isPriority" | "content">;
+export type PolicyCardItem = Pick<Policy, "id" | "title" | "summary" | "region" | "category" | "categories" | "isPriority" | "content">;

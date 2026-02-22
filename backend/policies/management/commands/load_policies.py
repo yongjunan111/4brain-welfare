@@ -66,6 +66,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # JSON 파일 경로
         json_path = '../data/raw/seoul_policies.json'
+        import os
+        abs_path = os.path.abspath(json_path)
+        self.stdout.write(f'Loading data from: {abs_path}')
 
         with open(json_path, 'r', encoding='utf-8') as f:
             policies = json.load(f)
@@ -160,56 +163,69 @@ class Command(BaseCommand):
             if is_for_newlywed:
                 stats['newlywed'] += 1
 
-            # Policy 생성 또는 업데이트
-            policy, created = Policy.objects.update_or_create(
-                policy_id=item['plcyNo'],  # [RENAME] plcy_no → policy_id
-                defaults={
-                    'title': item.get('plcyNm', ''),  # [RENAME] plcy_nm → title
-                    'description': item.get('plcyExplnCn', ''),  # [RENAME] plcy_expln_cn → description
-                    'support_content': item.get('plcySprtCn', ''),  # [RENAME] plcy_sprt_cn → support_content
-                    'age_min': min_age,  # [RENAME] sprt_trgt_min_age → age_min
-                    'age_max': max_age,  # [RENAME] sprt_trgt_max_age → age_max
-                    # [REMOVED] sprt_trgt_age_lmt_yn 삭제
-                    'income_level': item.get('earnCndSeCd', ''),  # [RENAME] earn_cnd_se_cd → income_level
-                    'income_min': int(item['earnMinAmt']) if item.get('earnMinAmt') and item['earnMinAmt'] != '' else None,  # [RENAME] earn_min_amt → income_min
-                    'income_max': int(item['earnMaxAmt']) if item.get('earnMaxAmt') and item['earnMaxAmt'] != '' else None,  # [RENAME] earn_max_amt → income_max
-                    'marriage_status': item.get('mrgSttsCd', ''),  # [RENAME] mrg_stts_cd → marriage_status
-                    'employment_status': item.get('jobCd', ''),  # [RENAME] job_cd → employment_status
-                    'education_status': item.get('schoolCd', ''),  # [RENAME] school_cd → education_status
-                    'apply_start_date': apply_start,  # [RENAME] aply_start_dt → apply_start_date
-                    'apply_end_date': apply_end,  # [RENAME] aply_end_dt → apply_end_date
-                    'apply_method': item.get('plcyAplyMthdCn', ''),  # [RENAME] plcy_aply_mthd_cn → apply_method
-                    'apply_url': item.get('aplyUrlAddr', ''),  # [RENAME] aply_url_addr → apply_url
-                    'district': district,
-                    # [BRAIN4-19] 사업기간 필드
-                    'business_start_date': biz_start,  # [RENAME] biz_prd_bgng_ymd → business_start_date
-                    'business_end_date': biz_end,  # [RENAME] biz_prd_end_ymd → business_end_date
-                    # [BRAIN4-14] 특수조건 필드 (변경 없음)
-                    'sbiz_cd': sbiz_cd,
-                    'is_for_single_parent': is_for_single_parent,
-                    'is_for_disabled': is_for_disabled,
-                    'is_for_low_income': is_for_low_income,
-                    'is_for_newlywed': is_for_newlywed,
-                }
-            )
+            # plcyNo 필수 확인
+            if not item.get('plcyNo'):
+                self.stdout.write(self.style.WARNING(f'Skipping item without plcyNo: {item.get("plcyNm")}'))
+                continue
 
-            # 카테고리 연결 (M:N)
-            lclsf = item.get('lclsfNm', '').strip()
-            if lclsf:
-                cat_names = [c.strip() for c in lclsf.split(',') if c.strip()]
-            else:
-                cat_names = ['기타']
+            try:
+                # Policy 생성 또는 업데이트
+                policy, created = Policy.objects.update_or_create(
+                    policy_id=item['plcyNo'],  # [RENAME] plcy_no → policy_id
+                    defaults={
+                        'title': item.get('plcyNm', ''),  # [RENAME] plcy_nm → title
+                        'description': item.get('plcyExplnCn', ''),  # [RENAME] plcy_expln_cn → description
+                        'support_content': item.get('plcySprtCn', ''),  # [RENAME] plcy_sprt_cn → support_content
+                        'age_min': min_age,  # [RENAME] sprt_trgt_min_age → age_min
+                        'age_max': max_age,  # [RENAME] sprt_trgt_max_age → age_max
+                        # [REMOVED] sprt_trgt_age_lmt_yn 삭제
+                        'income_level': item.get('earnCndSeCd', ''),  # [RENAME] earn_cnd_se_cd → income_level
+                        'income_min': int(item['earnMinAmt']) if item.get('earnMinAmt') and item['earnMinAmt'] != '' else None,  # [RENAME] earn_min_amt → income_min
+                        'income_max': int(item['earnMaxAmt']) if item.get('earnMaxAmt') and item['earnMaxAmt'] != '' else None,  # [RENAME] earn_max_amt → income_max
+                        'marriage_status': item.get('mrgSttsCd', ''),  # [RENAME] mrg_stts_cd → marriage_status
+                        'employment_status': item.get('jobCd', ''),  # [RENAME] job_cd → employment_status
+                        'education_status': item.get('schoolCd', ''),  # [RENAME] school_cd → education_status
+                        'apply_start_date': apply_start,  # [RENAME] aply_start_dt → apply_start_date
+                        'apply_end_date': apply_end,  # [RENAME] aply_end_dt → apply_end_date
+                        'apply_method': item.get('plcyAplyMthdCn', ''),  # [RENAME] plcy_aply_mthd_cn → apply_method
+                        'apply_url': item.get('aplyUrlAddr', ''),  # [RENAME] aply_url_addr → apply_url
+                        'district': district,
+                        # [BRAIN4-19] 사업기간 필드
+                        'business_start_date': biz_start,  # [RENAME] biz_prd_bgng_ymd → business_start_date
+                        'business_end_date': biz_end,  # [RENAME] biz_prd_end_ymd → business_end_date
+                        # [BRAIN4-14] 특수조건 필드 (변경 없음)
+                        'sbiz_cd': sbiz_cd,
+                        'is_for_single_parent': is_for_single_parent,
+                        'is_for_disabled': is_for_disabled,
+                        'is_for_low_income': is_for_low_income,
+                        'is_for_newlywed': is_for_newlywed,
+                        # [BRAIN4-36] 카테고리 필드 추가 적재
+                        'category': item.get('lclsfNm', '').strip(),  # [RENAME] lclsf_nm → category
+                        'subcategory': item.get('mclsfNm', '').strip(),  # [RENAME] mclsf_nm → subcategory
+                    }
+                )
 
-            policy.categories.clear()
-            for cat_name in cat_names:
-                if cat_name in categories:
-                    policy.categories.add(categories[cat_name])
+                # 카테고리 연결 (M:N)
+                lclsf = item.get('lclsfNm', '').strip()
+                if lclsf:
+                    cat_names = [c.strip() for c in lclsf.split(',') if c.strip()]
                 else:
-                    policy.categories.add(categories['기타'])
+                    cat_names = ['기타']
 
-            count += 1
-            if count % 50 == 0:
-                self.stdout.write(f'{count}개 처리 중...')
+                policy.categories.clear()
+                for cat_name in cat_names:
+                    if cat_name in categories:
+                        policy.categories.add(categories[cat_name])
+                    else:
+                        policy.categories.add(categories['기타'])
+
+                count += 1
+                if count % 50 == 0:
+                    self.stdout.write(f'{count}개 처리 중...')
+            
+            except Exception as e:
+                self.stdout.write(self.style.ERROR(f"Error loading policy {item.get('plcyNo')}: {e}"))
+                continue
 
         # 완료 메시지 + 특수조건 통계
         self.stdout.write(self.style.SUCCESS(f'완료! 총 {count}개 정책 적재'))

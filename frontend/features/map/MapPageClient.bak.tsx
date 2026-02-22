@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect } from "react";
 import { KakaoMap } from "./components/KakaoMap";
 // import { MOCK_FACILITIES } from "./map.mock"; // Mock 제거
 import { MapFacility, Location, MapFilterState } from "./map.types";
-import { fetchCenters, fetchMapPOIs, YouthCenter } from "./map.api";
+import { fetchCenters, YouthCenter } from "./map.api";
 
 const APP_KEY_EXISTS = !!process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
 
@@ -23,23 +23,19 @@ export function MapPageClient() {
     const categories = ["전체", "청년센터"]; // API 데이터는 대부분 청년센터임
 
     // 데이터 로드
-    // 데이터 로드
     useEffect(() => {
         let alive = true;
         setLoading(true);
 
-        Promise.all([
-            fetchCenters(1, 1000),
-            fetchMapPOIs() // 스마트서울맵 데이터
-        ]).then(([centers, pois]) => {
+        fetchCenters(1, 1000).then(centers => { // 일단 최대 1000개 가져옴 (페이지네이션 UI 없음)
             if (!alive) return;
 
-            const centerFacilities: MapFacility[] = centers.map(c => ({
-                id: `center-${c.cntrSn}`, // ID 충돌 방지
+            const mapFacilities: MapFacility[] = centers.map(c => ({
+                id: c.cntrSn,
                 name: c.cntrNm,
-                category: "청년센터",
+                category: "청년센터", // API에는 유형이 명확치 않으므로 통일
                 location: {
-                    lat: c.lat ?? 0,
+                    lat: c.lat ?? 0, // 폴백 데이터에서 좌표 제공
                     lng: c.lng ?? 0,
                 },
                 address: c.cntrAddr + " " + (c.cntrDaddr || ""),
@@ -47,24 +43,7 @@ export function MapPageClient() {
                 url: c.cntrUrlAddr,
             }));
 
-            const poiFacilities: MapFacility[] = pois.map(p => ({
-                id: `poi-${p.id}`,
-                name: p.name,
-                category: "기타", // map.types.ts에 있는 카테고리 중 선택 (또는 타입 확장 필요)
-                location: {
-                    lat: p.latitude,
-                    lng: p.longitude,
-                },
-                address: p.address,
-                phone: p.phone,
-                url: p.detail_url,
-                description: p.theme_name // 테마 이름을 설명으로 사용
-            }));
-
-            setFacilities([...centerFacilities, ...poiFacilities]);
-            setLoading(false);
-        }).catch(err => {
-            console.error("Failed to load map data", err);
+            setFacilities(mapFacilities);
             setLoading(false);
         });
 

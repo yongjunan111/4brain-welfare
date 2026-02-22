@@ -19,15 +19,20 @@ export function PolicyCard({ policy }: { policy: PolicyCardItem }) {
     >
       {/* ✅ (A) 카드 상단 고정 영역: hover와 무관 */}
       <div className="p-4 pb-2">
-        <div className="mb-2 flex items-center gap-2">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
           {policy.isPriority && (
             <span className="inline-flex items-center rounded-full bg-yellow-500 px-3 py-1 text-xs font-semibold text-white">
               1순위
             </span>
           )}
-          <span className="inline-flex items-center rounded-full border bg-white px-3 py-1 text-xs font-semibold text-gray-900">
-            {categoryLabel(policy.category)}
-          </span>
+          {(policy.categories || [policy.category]).map((cat) => (
+            <span
+              key={cat}
+              className="inline-flex items-center rounded-full border bg-white px-3 py-1 text-xs font-semibold text-gray-900"
+            >
+              {categoryLabel(cat)}
+            </span>
+          ))}
         </div>
 
         <h3 className="line-clamp-2 h-12 text-md font-extrabold tracking-tight text-gray-900">
@@ -87,23 +92,18 @@ export function PolicyCard({ policy }: { policy: PolicyCardItem }) {
   );
 }
 
-/** 카테고리 라벨(표시용) */
 function categoryLabel(category: PolicyCardItem["category"]) {
   switch (category) {
-    case "housing":
-      return "주거";
-    case "finance":
-      return "생활·금융";
     case "job":
       return "일자리";
-    case "entrepreneurship":
-      return "창업";
-    case "mental-health":
-      return "정신건강";
-    case "emotional-wellbeing":
-      return "마음건강";
-    case "care-protection":
-      return "보호·돌봄";
+    case "housing":
+      return "주거";
+    case "education":
+      return "교육";
+    case "welfare":
+      return "복지·문화";
+    case "participation":
+      return "참여·권리";
     default:
       return "카테고리";
   }

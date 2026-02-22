@@ -4,6 +4,7 @@ import Link from "next/link";
 import { fetchPolicyDetailById } from "@/features/policy/policy.api";
 import { ScrapButton } from "@/features/policy/ScrapButton";
 import { BackButton } from "@/components/common/BackButton";
+import { JOB_CODE_MAP, EDUCATION_CODE_MAP } from "@/constants/policy-codes";
 
 export default async function PolicyDetailPage({
     params,
@@ -37,7 +38,7 @@ export default async function PolicyDetailPage({
     const ageRange =
         policy.minAge || policy.maxAge
             ? `${policy.minAge ?? ""}세 ~ ${policy.maxAge ?? ""}세`
-            : "제한 없음";
+            : "제한없음";
 
     return (
         <div className="mx-auto w-full max-w-[1280px] px-4 py-8">
@@ -142,13 +143,15 @@ export default async function PolicyDetailPage({
                                 <dt className="text-gray-500">연령</dt>
                                 <dd className="text-gray-900">{ageRange}</dd>
                             </div>
+                            {/* [BRAIN4-UI] 소득 기준은 코드로만 제공되어 텍스트 매핑 불가 (숨김 처리)
                             {policy.incomeConditionCode && (
                                 <div className="flex justify-between">
                                     <dt className="text-gray-500">소득 조건</dt>
                                     <dd className="text-gray-900">{policy.incomeConditionCode}</dd>
                                 </div>
                             )}
-                            {(policy.minIncome || policy.maxIncome) && (
+                             */}
+                            {((policy.minIncome || 0) > 0 || (policy.maxIncome || 0) > 0) && (
                                 <div className="flex justify-between">
                                     <dt className="text-gray-500">소득 범위</dt>
                                     <dd className="text-gray-900">
@@ -159,13 +162,17 @@ export default async function PolicyDetailPage({
                             {policy.jobCode && (
                                 <div className="flex justify-between">
                                     <dt className="text-gray-500">직업 조건</dt>
-                                    <dd className="text-gray-900">{policy.jobCode}</dd>
+                                    <dd className="text-gray-900">
+                                        {JOB_CODE_MAP[policy.jobCode] || policy.jobCode}
+                                    </dd>
                                 </div>
                             )}
                             {policy.schoolCode && (
                                 <div className="flex justify-between">
                                     <dt className="text-gray-500">학력 조건</dt>
-                                    <dd className="text-gray-900">{policy.schoolCode}</dd>
+                                    <dd className="text-gray-900">
+                                        {EDUCATION_CODE_MAP[policy.schoolCode] || policy.schoolCode}
+                                    </dd>
                                 </div>
                             )}
                         </dl>
