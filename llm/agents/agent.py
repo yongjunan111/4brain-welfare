@@ -82,7 +82,7 @@ async def create_agent_with_mcp(
     MCP 경유 모드 Agent 생성.
 
     - 오케스트레이터는 그대로 두고 (로컬 실행)
-    - rewrite/search/rag 도구는 MCP 서버 도구를 사용
+    - search 도구는 MCP 서버 도구를 사용 (내부 rewrite 포함)
     - matching 경로(extract_info/check_eligibility)는 로컬 도구 유지
     """
     try:
@@ -109,7 +109,7 @@ async def create_agent_with_mcp(
     )
     mcp_tools = await mcp_client.get_tools()
 
-    # 로컬 도구 중 rewrite/search는 MCP 도구로 대체
+    # search는 MCP로 대체하고, rewrite는 search 내부로 통합했으므로 로컬에서 제외
     local_tools = [
         tool
         for tool in ALL_TOOLS

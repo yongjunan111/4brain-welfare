@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from .rewrite import rewrite_query_tool
 
 DEFAULT_TOP_K = 10
 MAX_TOP_K = 20
 _BACKEND: Optional[Callable[..., Any]] = None
 _DJANGO_READY = False
+logger = logging.getLogger(__name__)
 
 
 def _ensure_paths() -> tuple[Path, Path]:
@@ -64,6 +67,7 @@ def _setup_django() -> bool:
         _DJANGO_READY = True
         return True
     except Exception:
+        logger.error("Django setup 실패", exc_info=True)
         return False
 
 
@@ -78,6 +82,7 @@ def _run_search_docs(query: str, top_k: int) -> list[Any]:
     try:
         backend = _load_backend()
     except Exception:
+        logger.error("BGE backend 로드 실패", exc_info=True)
         return []
 
     try:
@@ -90,6 +95,7 @@ def _run_search_docs(query: str, top_k: int) -> list[Any]:
                 verbose=False,
             )
     except Exception:
+        logger.error("BGE 검색 실패", exc_info=True)
         return []
 
     return list(docs or [])
@@ -198,6 +204,7 @@ def _fetch_policies_by_ids(policy_ids: list[str]) -> dict[str, dict]:
         queryset = Policy.objects.filter(policy_id__in=policy_ids)
         return {policy.policy_id: _policy_to_dict(policy) for policy in queryset}
     except Exception:
+        logger.error("PostgreSQL 정책 조회 실패", exc_info=True)
         return {}
 
 
@@ -229,15 +236,24 @@ def _merge_docs_with_policy_records(docs: list[Any], policy_map: dict[str, dict]
     return merged
 
 
-def search_policies_tool(query: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
+def search_policies_tool(query: str, top_k: int = DEFAULT_TOP_K) -> dict[str, Any]:
     """
     MCP 검색 도구.
 
-    입력 쿼리를 기반으로 BGE retrieve+rerank 후, policy_id로 PostgreSQL 원문 정책을 조회해 반환한다.
+    입력 쿼리를 내부에서 rewrite 후 BGE retrieve+rerank를 수행하고,
+    policy_id로 PostgreSQL 원문 정책을 조회해 반환한다.
     """
-    query = (query or "").strip()
-    if not query:
-        return []
+    original_query = (query or "").strip()
+    if not original_query:
+        return {
+            "original_query": "",
+            "rewritten_query": "",
+            "result_count": 0,
+            "policies": [],
+        }
+
+    rewritten_query = rewrite_query_tool(original_query)
+    rewritten_query = (rewritten_query or "").strip() or original_query
 
     try:
         parsed = int(top_k)
@@ -245,7 +261,13 @@ def search_policies_tool(query: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
         parsed = DEFAULT_TOP_K
     top_k = min(max(1, parsed), MAX_TOP_K)
 
-    docs = _run_search_docs(query=query, top_k=top_k)
+    docs = _run_search_docs(query=rewritten_query, top_k=top_k)
     policy_ids = _extract_policy_ids(docs)
     policy_map = _fetch_policies_by_ids(policy_ids)
-    return _merge_docs_with_policy_records(docs, policy_map)[:top_k]
+    policies = _merge_docs_with_policy_records(docs, policy_map)[:top_k]
+    return {
+        "original_query": original_query,
+        "rewritten_query": rewritten_query,
+        "result_count": len(policies),
+        "policies": policies,
+    }

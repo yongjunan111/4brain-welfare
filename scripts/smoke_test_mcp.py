@@ -60,29 +60,18 @@ async def main() -> int:
         for tool in tools:
             print(f"  - {tool.name}")
 
-        rewrite = next((t for t in tools if t.name == "rewrite_query"), None)
         search = next((t for t in tools if t.name == "search_policies"), None)
-        rag = next((t for t in tools if t.name == "rag_pipeline"), None)
 
-        if not rewrite or not search or not rag:
-            print("필수 MCP 도구(rewrite_query/search_policies/rag_pipeline) 누락")
+        if not search:
+            print("필수 MCP 도구(search_policies) 누락")
             return 1
 
-        rewritten_raw = await rewrite.ainvoke({"query": "월세 도와줘"})
-        rewritten = _unwrap_mcp_result(rewritten_raw)
-        if not isinstance(rewritten, str):
-            rewritten = str(rewritten)
-        print(f"rewrite_query -> {rewritten}")
-
-        search_raw = await search.ainvoke({"query": rewritten, "top_k": 3})
+        search_raw = await search.ainvoke({"query": "월세 도와줘", "top_k": 3})
         search_result = _unwrap_mcp_result(search_raw)
-        search_count = len(search_result) if isinstance(search_result, list) else 0
+        rewritten_query = search_result.get("rewritten_query", "") if isinstance(search_result, dict) else ""
+        search_count = search_result.get("result_count", 0) if isinstance(search_result, dict) else 0
+        print(f"search_policies -> rewritten: {rewritten_query}")
         print(f"search_policies -> {search_count}건")
-
-        rag_raw = await rag.ainvoke({"query": "청년 취업 지원", "top_k": 3})
-        rag_result = _unwrap_mcp_result(rag_raw)
-        rag_count = rag_result.get("result_count", 0) if isinstance(rag_result, dict) else 0
-        print(f"rag_pipeline -> {rag_count}건")
 
         print("MCP 스모크 테스트 성공")
         return 0

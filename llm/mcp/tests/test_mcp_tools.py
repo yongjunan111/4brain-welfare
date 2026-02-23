@@ -11,9 +11,16 @@ from llm.mcp.tools.search import search_policies_tool
 
 
 class SearchPoliciesToolTests(unittest.TestCase):
+    @patch("llm.mcp.tools.search.rewrite_query_tool")
     @patch("llm.mcp.tools.search._fetch_policies_by_ids")
     @patch("llm.mcp.tools.search._run_search_docs")
-    def test_search_policies_tool_merges_retrieval_order(self, mock_run_search_docs, mock_fetch_policies_by_ids):
+    def test_search_policies_tool_merges_retrieval_order(
+        self,
+        mock_run_search_docs,
+        mock_fetch_policies_by_ids,
+        mock_rewrite_query_tool,
+    ):
+        mock_rewrite_query_tool.return_value = "청년 주거 지원"
         # retriever/reranker 순서: P2 -> P1
         mock_run_search_docs.return_value = [
             SimpleNamespace(
@@ -32,14 +39,23 @@ class SearchPoliciesToolTests(unittest.TestCase):
 
         result = search_policies_tool(query="청년 주거", top_k=2)
 
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["policy_id"], "P2")
-        self.assertEqual(result[1]["policy_id"], "P1")
-        self.assertEqual(result[0]["source"], "postgres")
+        self.assertEqual(result["original_query"], "청년 주거")
+        self.assertEqual(result["rewritten_query"], "청년 주거 지원")
+        self.assertEqual(result["result_count"], 2)
+        self.assertEqual(result["policies"][0]["policy_id"], "P2")
+        self.assertEqual(result["policies"][1]["policy_id"], "P1")
+        self.assertEqual(result["policies"][0]["source"], "postgres")
 
+    @patch("llm.mcp.tools.search.rewrite_query_tool")
     @patch("llm.mcp.tools.search._fetch_policies_by_ids")
     @patch("llm.mcp.tools.search._run_search_docs")
-    def test_search_policies_tool_falls_back_when_postgres_miss(self, mock_run_search_docs, mock_fetch_policies_by_ids):
+    def test_search_policies_tool_falls_back_when_postgres_miss(
+        self,
+        mock_run_search_docs,
+        mock_fetch_policies_by_ids,
+        mock_rewrite_query_tool,
+    ):
+        mock_rewrite_query_tool.return_value = "청년"
         mock_run_search_docs.return_value = [
             SimpleNamespace(
                 metadata={
@@ -55,23 +71,25 @@ class SearchPoliciesToolTests(unittest.TestCase):
 
         result = search_policies_tool(query="청년", top_k=1)
 
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["policy_id"], "P404")
-        self.assertEqual(result[0]["source"], "retriever_fallback")
+        self.assertEqual(result["result_count"], 1)
+        self.assertEqual(result["policies"][0]["policy_id"], "P404")
+        self.assertEqual(result["policies"][0]["source"], "retriever_fallback")
 
 
 class RagPipelineToolTests(unittest.TestCase):
     @patch("llm.mcp.tools.rag_pipeline.search_policies_tool")
-    @patch("llm.mcp.tools.rag_pipeline.rewrite_query_tool")
-    def test_rag_pipeline_runs_rewrite_then_search(self, mock_rewrite_query_tool, mock_search_policies_tool):
-        mock_rewrite_query_tool.return_value = "청년 주거 지원"
-        mock_search_policies_tool.return_value = [{"policy_id": "P1", "title": "정책1"}]
+    def test_rag_pipeline_runs_rewrite_then_search(self, mock_search_policies_tool):
+        mock_search_policies_tool.return_value = {
+            "original_query": "월세 도와줘",
+            "rewritten_query": "청년 주거 지원",
+            "result_count": 1,
+            "policies": [{"policy_id": "P1", "title": "정책1"}],
+        }
 
         result = rag_pipeline_tool(query="월세 도와줘", top_k=3)
 
-        mock_rewrite_query_tool.assert_called_once_with("월세 도와줘")
         mock_search_policies_tool.assert_called_once_with(
-            query="청년 주거 지원",
+            query="월세 도와줘",
             top_k=3,
         )
         self.assertEqual(result["rewritten_query"], "청년 주거 지원")
