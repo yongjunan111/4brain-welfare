@@ -24,6 +24,9 @@ from policies.services.matching_keys import (
     CHATBOT_TOP_K,
     KNOWN_EDUCATION_CODES,
     KNOWN_JOB_CODES,
+    INCOME_CODE_ANY,
+    INCOME_CODE_ANNUAL,
+    INCOME_CODE_OTHER,
     parse_code_string,
     normalize_user_info,
 )
@@ -322,12 +325,87 @@ def _matches_marriage_requirement(policy, user_info: dict) -> bool:
     return marriage_code in policy_codes
 
 
+# =============================================================================
+# [BRAIN4-37] 2026 기준중위소득 (월, 원) — 보건복지부 고시
+# =============================================================================
+
+_MEDIAN_INCOME_2026_MONTHLY = {
+    1: 2_564_238,
+    2: 4_199_292,
+    3: 5_367_880,
+    4: 6_509_816,
+    5: 7_571_462,
+    6: 8_555_952,
+}
+
+
+def _annual_income_to_median_pct(annual_income_man_won, household_size) -> float | None:
+    """
+    연소득(만원) + 가구원수 → 중위소득 대비 % 반환.
+
+    Args:
+        annual_income_man_won: 연소득 (만원 단위)
+        household_size: 가구원 수
+
+    Returns:
+        중위소득 대비 퍼센트 (예: 50.0), 계산 불가 시 None
+    """
+    if annual_income_man_won is None or household_size is None:
+        return None
+    if household_size <= 0:
+        return None
+    # 6인 초과 → 6인 cap
+    capped_size = min(household_size, 6)
+    monthly_median = _MEDIAN_INCOME_2026_MONTHLY.get(capped_size)
+    if monthly_median is None:
+        return None
+    annual_median = monthly_median * 12
+    annual_income_won = annual_income_man_won * 10_000
+    return (annual_income_won / annual_median) * 100
+
+
+def _matches_income_requirement(policy, user_info: dict) -> bool:
+    """
+    소득 요건 매칭.
+
+    - 0043001(무관) / 0043003(기타) / 빈값 / 알수없는코드 → True (pass)
+    - 0043002(연소득) → user income <= policy.income_max
+    - 0043002인데 income_max is None or <=0 → True (fail-open, 직접확인 필요)
+    - user income 미입력 → True (fail-open)
+    """
+    income_code = policy.income_level or ''
+
+    # 빈값 → pass
+    if not income_code:
+        return True
+
+    # 무관 / 기타 → pass
+    if income_code in (INCOME_CODE_ANY, INCOME_CODE_OTHER):
+        return True
+
+    # 알수없는 코드 → fail-open
+    if income_code != INCOME_CODE_ANNUAL:
+        return True
+
+    # income_code == INCOME_CODE_ANNUAL ('0043002')
+    policy_max = policy.income_max
+    if policy_max is None or policy_max <= 0:
+        return True  # fail-open: earnMaxAmt 미설정
+
+    user_income = user_info.get('income')
+    if user_income is None:
+        return True  # fail-open: 사용자 소득 미입력
+
+    return user_income <= policy_max
+
+
 def _passes_profile_code_filters(policy, user_info: dict) -> bool:
-    """job/education/marriage 코드 필터 종합 판정"""
+    """job/education/marriage/income 코드 필터 종합 판정"""
     return (
         _matches_job_requirement(policy, user_info) and
         _matches_education_requirement(policy, user_info) and
-        _matches_marriage_requirement(policy, user_info)
+        _matches_marriage_requirement(policy, user_info) and
+        _matches_income_requirement(policy, user_info)
     )
 
 
@@ -482,7 +560,7 @@ def _get_relevant_categories(user_info):
 
     # 소득 맥락 (생활지원)
     income = user_info.get('income')
-    if income is not None and income < 300:
+    if income is not None and income < 3600:
         # ---------------------------------------------------------------------
         # [2026.01.20] 대분류 변경 (생활 -> 복지문화)
         # ---------------------------------------------------------------------

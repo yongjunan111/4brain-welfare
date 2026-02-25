@@ -130,3 +130,62 @@ class PolicyOverrideTests(SimpleTestCase):
         self.assertEqual(updated, fields)  # 값 불변
         self.assertEqual(logs, [])  # change log 없음
         self.assertIn('nonexistent_field', cm.output[0])  # 경고 로그에 필드명 포함
+
+
+# =============================================================================
+# [BRAIN4-37 C08] 결정표 64건 override 검증 테스트
+# =============================================================================
+from etl.services.overrides import POLICY_FIELD_OVERRIDES
+
+
+class PolicyOverrideDecisionSheetTests(SimpleTestCase):
+    """결정표 64건 override 정합성 검증"""
+
+    def test_override_count_is_64(self):
+        """override 정책 수 == 64"""
+        self.assertEqual(len(POLICY_FIELD_OVERRIDES), 64)
+
+    def test_all_fields_are_education_or_employment(self):
+        """모든 override 필드가 education_status/employment_status만 포함"""
+        allowed = {'education_status', 'employment_status'}
+        for policy_id, fields in POLICY_FIELD_OVERRIDES.items():
+            for field in fields:
+                self.assertIn(
+                    field, allowed,
+                    f"{policy_id}: unexpected field '{field}'"
+                )
+
+    def test_no_unknown_codes_in_overrides(self):
+        """unknown 코드(0049009/0013009) 미포함 확인"""
+        for policy_id, fields in POLICY_FIELD_OVERRIDES.items():
+            for field, value in fields.items():
+                codes = {c.strip() for c in value.split(',')}
+                self.assertNotIn(
+                    '0049009', codes,
+                    f"{policy_id}.{field} contains unknown edu code 0049009"
+                )
+                self.assertNotIn(
+                    '0013009', codes,
+                    f"{policy_id}.{field} contains unknown job code 0013009"
+                )
+
+    def test_dual_override_policy(self):
+        """듀얼 override 정책(20250624005400111124) 검증"""
+        entry = POLICY_FIELD_OVERRIDES.get('20250624005400111124')
+        self.assertIsNotNone(entry)
+        self.assertIn('education_status', entry)
+        self.assertIn('employment_status', entry)
+        self.assertEqual(
+            entry['education_status'],
+            '0049002,0049003,0049004,0049005,0049006,0049007,0049008',
+        )
+        self.assertEqual(entry['employment_status'], '0013001,0013003')
+
+    def test_gap_unknown_merge_policy(self):
+        """gap+unknown 병합 정책(20250113005400110180) 검증"""
+        entry = POLICY_FIELD_OVERRIDES.get('20250113005400110180')
+        self.assertIsNotNone(entry)
+        self.assertEqual(
+            entry['education_status'],
+            '0049001,0049002,0049003,0049004,0049005,0049006,0049007,0049008',
+        )

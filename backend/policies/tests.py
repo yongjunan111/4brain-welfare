@@ -247,11 +247,15 @@ class TestFailOpenGuard(SimpleTestCase):
             employment_status='',
             education_status='',
             marriage_status='',
+            income_level='',
+            income_max=None,
         ):
             self.policy_id = policy_id
             self.employment_status = employment_status
             self.education_status = education_status
             self.marriage_status = marriage_status
+            self.income_level = income_level
+            self.income_max = income_max
 
     def test_job_unknown_only_passes(self):
         policy = self.DummyPolicy(employment_status='0013009')
@@ -282,3 +286,116 @@ class TestFailOpenGuard(SimpleTestCase):
         policy = self.DummyPolicy(marriage_status='0055001')  # 기혼 전용
         self.assertFalse(_passes_profile_code_filters(policy, {'marriage_code': '0055002'}))
         self.assertTrue(_passes_profile_code_filters(policy, {'marriage_code': '0055001'}))
+
+
+# =============================================================================
+# [BRAIN4-37] 소득 매칭 테스트
+# =============================================================================
+from policies.services.matching import (
+    _matches_income_requirement,
+    _annual_income_to_median_pct,
+)
+
+
+class TestIncomeMatching(SimpleTestCase):
+    """소득 요건 매칭 테스트 (8개)"""
+
+    class DummyPolicy:
+        def __init__(self, income_level='', income_max=None):
+            self.income_level = income_level
+            self.income_max = income_max
+
+    def test_income_any_passes(self):
+        """0043001(무관) → pass"""
+        policy = self.DummyPolicy(income_level='0043001')
+        self.assertTrue(_matches_income_requirement(policy, {'income': 5000}))
+
+    def test_income_annual_under_passes(self):
+        """0043002(연소득) user < max → pass"""
+        policy = self.DummyPolicy(income_level='0043002', income_max=5000)
+        self.assertTrue(_matches_income_requirement(policy, {'income': 3000}))
+
+    def test_income_annual_over_fails(self):
+        """0043002(연소득) user > max → fail"""
+        policy = self.DummyPolicy(income_level='0043002', income_max=5000)
+        self.assertFalse(_matches_income_requirement(policy, {'income': 6000}))
+
+    def test_income_annual_equal_passes(self):
+        """0043002(연소득) user == max → pass"""
+        policy = self.DummyPolicy(income_level='0043002', income_max=5000)
+        self.assertTrue(_matches_income_requirement(policy, {'income': 5000}))
+
+    def test_income_user_none_failopen(self):
+        """user income 미입력 → fail-open (pass)"""
+        policy = self.DummyPolicy(income_level='0043002', income_max=5000)
+        self.assertTrue(_matches_income_requirement(policy, {}))
+
+    def test_income_other_passes(self):
+        """0043003(기타) → pass"""
+        policy = self.DummyPolicy(income_level='0043003')
+        self.assertTrue(_matches_income_requirement(policy, {'income': 5000}))
+
+    def test_income_empty_passes(self):
+        """빈값 → pass"""
+        policy = self.DummyPolicy(income_level='')
+        self.assertTrue(_matches_income_requirement(policy, {'income': 5000}))
+
+    def test_income_unknown_code_passes(self):
+        """알수없는 코드 → pass (fail-open)"""
+        policy = self.DummyPolicy(income_level='0043999')
+        self.assertTrue(_matches_income_requirement(policy, {'income': 5000}))
+
+
+class TestIncomeMaxZeroFailopen(SimpleTestCase):
+    """income_max=0 또는 None 가드 테스트"""
+
+    class DummyPolicy:
+        def __init__(self, income_level='', income_max=None):
+            self.income_level = income_level
+            self.income_max = income_max
+
+    def test_income_annual_max_none_failopen(self):
+        """0043002인데 income_max=None → fail-open"""
+        policy = self.DummyPolicy(income_level='0043002', income_max=None)
+        self.assertTrue(_matches_income_requirement(policy, {'income': 9999}))
+
+    def test_income_annual_max_zero_failopen(self):
+        """0043002인데 income_max=0 → fail-open"""
+        policy = self.DummyPolicy(income_level='0043002', income_max=0)
+        self.assertTrue(_matches_income_requirement(policy, {'income': 9999}))
+
+
+class TestMedianIncomeConversion(SimpleTestCase):
+    """중위소득 환산 테스트 (6개)"""
+
+    def test_1person_100pct(self):
+        """1인가구 연소득=중위소득 → 100%"""
+        annual = 2_564_238 * 12 // 10_000  # 월→연→만원
+        result = _annual_income_to_median_pct(annual, 1)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result, 100.0, delta=1.0)
+
+    def test_4person_50pct(self):
+        """4인가구 연소득=중위소득 50% → 50%"""
+        annual_50pct = 6_509_816 * 12 // 10_000 // 2
+        result = _annual_income_to_median_pct(annual_50pct, 4)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result, 50.0, delta=1.0)
+
+    def test_none_annual_income(self):
+        """연소득 None → None"""
+        self.assertIsNone(_annual_income_to_median_pct(None, 4))
+
+    def test_none_household_size(self):
+        """가구원수 None → None"""
+        self.assertIsNone(_annual_income_to_median_pct(3000, None))
+
+    def test_household_7_capped_to_6(self):
+        """가구원수 7 → 6인으로 cap"""
+        result_7 = _annual_income_to_median_pct(5000, 7)
+        result_6 = _annual_income_to_median_pct(5000, 6)
+        self.assertEqual(result_7, result_6)
+
+    def test_household_0_returns_none(self):
+        """가구원수 0 → None"""
+        self.assertIsNone(_annual_income_to_median_pct(3000, 0))
