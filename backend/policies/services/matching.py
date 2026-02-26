@@ -388,7 +388,12 @@ def _matches_income_requirement(policy, user_info: dict) -> bool:
 
     # 알수없는 코드 → fail-open
     if income_code != INCOME_CODE_ANNUAL:
-        logger.info("Unknown income code '%s' for policy %s – fail-open", income_code, getattr(policy, 'pk', '?'))
+        policy_id = getattr(policy, 'policy_id', 'UNKNOWN')
+        logger.warning(
+            "Unknown income code '%s' for policy %s – fail-open",
+            income_code,
+            policy_id,
+        )
         return True
 
     # income_code == INCOME_CODE_ANNUAL ('0043002')
