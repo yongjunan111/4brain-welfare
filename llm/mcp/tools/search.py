@@ -165,6 +165,7 @@ def _doc_to_fallback(doc: Any) -> dict:
         "age_min": metadata.get("minAge"),
         "age_max": metadata.get("maxAge"),
         "income_level": metadata.get("earnCndSeCd", ""),
+        "income_max": metadata.get("earnMaxAmt"),
         "apply_start_date": None,
         "apply_end_date": None,
         "business_start_date": None,
@@ -190,7 +191,7 @@ def _get_db_connection():
 _POLICY_COLUMNS = [
     "policy_id", "title", "description", "support_content",
     "apply_method", "apply_url", "district", "category", "subcategory",
-    "age_min", "age_max", "income_level",
+    "age_min", "age_max", "income_level", "income_max",
     "apply_start_date", "apply_end_date",
     "business_start_date", "business_end_date",
 ]
@@ -217,6 +218,7 @@ def _row_to_dict(row: tuple) -> dict:
         "age_min": d.get("age_min"),
         "age_max": d.get("age_max"),
         "income_level": d.get("income_level") or "",
+        "income_max": d.get("income_max"),
         "apply_start_date": _to_iso(d.get("apply_start_date")),
         "apply_end_date": _to_iso(d.get("apply_end_date")),
         "business_start_date": _to_iso(d.get("business_start_date")),
