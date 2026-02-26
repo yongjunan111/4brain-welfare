@@ -69,7 +69,7 @@ def match_policies_for_chatbot(user_info: dict, top_k: int = CHATBOT_TOP_K):
     """
     챗봇용 정책 매칭 - 상위 N개만 반환
 
-    [BRAIN4-34] top_k 기본값 CHATBOT_TOP_K(2)로 변경
+    [BRAIN4-34] top_k 기본값 CHATBOT_TOP_K(5)로 변경
 
     Args:
         user_info: 사용자 정보 dict (Profile.to_matching_dict() 형식)
@@ -77,7 +77,7 @@ def match_policies_for_chatbot(user_info: dict, top_k: int = CHATBOT_TOP_K):
             선택: employment_status, job_code, education_code, marriage_code,
                   housing_type, income, household_size, has_children,
                   children_ages, special_conditions, needs
-        top_k: 반환할 최대 정책 수 (기본값 2)
+        top_k: 반환할 최대 정책 수 (기본값 5)
 
     Returns:
         list of (Policy, score) tuples - 상위 top_k개
@@ -368,6 +368,9 @@ def _matches_income_requirement(policy, user_info: dict) -> bool:
     """
     소득 요건 매칭.
 
+    소득 코드는 3종(무관/연소득/기타)뿐이므로 ETL 한글 변환 대신
+    코드 직접 비교 (오타 방지, API 원본 대조 용이).
+
     - 0043001(무관) / 0043003(기타) / 빈값 / 알수없는코드 → True (pass)
     - 0043002(연소득) → user income <= policy.income_max
     - 0043002인데 income_max is None or <=0 → True (fail-open, 직접확인 필요)
@@ -385,6 +388,7 @@ def _matches_income_requirement(policy, user_info: dict) -> bool:
 
     # 알수없는 코드 → fail-open
     if income_code != INCOME_CODE_ANNUAL:
+        logger.info("Unknown income code '%s' for policy %s – fail-open", income_code, getattr(policy, 'pk', '?'))
         return True
 
     # income_code == INCOME_CODE_ANNUAL ('0043002')

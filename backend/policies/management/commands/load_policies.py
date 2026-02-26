@@ -6,7 +6,6 @@
 - 신혼부부는 텍스트 파싱 (API 코드 없음)
 """
 import json
-import re
 from datetime import datetime
 from django.core.management.base import BaseCommand
 from policies.models import Policy, Category

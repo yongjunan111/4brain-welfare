@@ -10,7 +10,6 @@ from policies.services.matching import (
 )
 from policies.services.matching_keys import (
     MATCHING_DICT_KEYS,
-    VALID_SPECIAL_CONDITIONS,
     CHATBOT_TOP_K,
     JOB_STATUS_TO_CODE,
     JOB_STATUS_TO_KOREAN,
@@ -85,8 +84,8 @@ class TestMatchingDictKeys(TestCase):
 class TestReturnPolicyContract(TestCase):
     """반환 계약 테스트"""
 
-    def test_chatbot_top_k_is_2(self):
-        self.assertEqual(CHATBOT_TOP_K, 2)
+    def test_chatbot_top_k_is_5(self):
+        self.assertEqual(CHATBOT_TOP_K, 5)
 
 
 class TestCodeMappingCompleteness(TestCase):
@@ -199,7 +198,7 @@ class TestWebChatbotCategoryCapContract(SimpleTestCase):
             {'age': 25},
             exclude_policy_ids=None,
             include_category=None,
-            limit=2,
+            limit=CHATBOT_TOP_K,
             max_per_category=2,
         )
 
