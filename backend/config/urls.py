@@ -25,7 +25,6 @@ from accounts.views import GoogleLogin, FindUsernameView, PasswordResetConfirmRe
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/policies/', include('policies.urls')),
-    path('api/temp_meta/', include('policies.temp_urls')),  # Temp for debugging
     path('api/accounts/', include('accounts.urls')), # 기존 커스텀 (유지)
     
     # dj-rest-auth & allauth
