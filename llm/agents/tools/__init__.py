@@ -13,7 +13,6 @@ from .check_eligibility import check_eligibility
 # 모든 도구 리스트 (Agent 생성 시 사용)
 ALL_TOOLS = [
     extract_info,
-    rewrite_query,
     search_policies,
     check_eligibility,
 ]

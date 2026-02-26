@@ -149,6 +149,27 @@ def rewrite_query_full(query: str) -> dict:
         }
 
 
+def rewrite_query_internal(query: str) -> str:
+    """
+    검색 파이프라인에서 직접 호출하는 순수 함수형 리라이터.
+
+    Args:
+        query: 사용자 원본 질문
+
+    Returns:
+        검색에 최적화된 키워드 문자열
+    """
+    if not query or len(query.strip()) < 2:
+        return query
+
+    try:
+        result = rewrite_query_full(query)
+        return result["bm25_query"]
+    except Exception as e:
+        print(f"쿼리 변환 오류: {e}")
+        return query
+
+
 @tool
 def rewrite_query(query: str) -> str:
     """
@@ -164,14 +185,4 @@ def rewrite_query(query: str) -> str:
         >>> rewrite_query("월세 도움 받을 수 있어?")
         "청년 월세 지원 주거 보조금"
     """
-    # 빈 입력은 그대로 반환
-    if not query or len(query.strip()) < 2:
-        return query
-
-    try:
-        result = rewrite_query_full(query)
-        return result["bm25_query"]
-
-    except Exception as e:
-        print(f"쿼리 변환 오류: {e}")
-        return query
+    return rewrite_query_internal(query)
