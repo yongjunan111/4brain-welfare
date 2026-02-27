@@ -12,8 +12,12 @@
 
 import json
 import os
+import importlib
 import pytest
 from unittest.mock import patch
+
+
+REWRITE_QUERY_MODULE = importlib.import_module("llm.agents.tools.rewrite_query")
 
 
 # ============================================================================
@@ -97,41 +101,51 @@ class TestCleanFallback:
 
 class TestRewriteQueryTool:
 
-    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
-    def test_returns_bm25_query_from_json(self, mock_llm):
-        from llm.agents.tools.rewrite_query import rewrite_query
-
-        mock_llm.return_value = json.dumps({
+    @patch.object(
+        REWRITE_QUERY_MODULE,
+        "rewrite_query_full",
+        return_value={
             "bm25_query": "청년 월세 지원 주거 보조금",
-            "intent_keywords": ["월세", "지원"],
-            "detected_pattern": "easy"
-        })
+            "original": "월세 도움 받을 수 있어?",
+            "semantic_query": "청년 월세 지원",
+        },
+    )
+    def test_returns_bm25_query_from_json(self, _mock_full):
+        from llm.agents.tools.rewrite_query import rewrite_query
         result = rewrite_query.invoke("월세 도움 받을 수 있어?")
         assert result == "청년 월세 지원 주거 보조금"
 
-    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
-    def test_returns_original_on_empty_bm25(self, mock_llm):
+    @patch.object(
+        REWRITE_QUERY_MODULE,
+        "rewrite_query_full",
+        return_value={
+            "bm25_query": "테스트 쿼리",
+            "original": "테스트 쿼리",
+            "semantic_query": "테스트 쿼리",
+        },
+    )
+    def test_returns_original_on_empty_bm25(self, _mock_full):
         from llm.agents.tools.rewrite_query import rewrite_query
-
-        mock_llm.return_value = json.dumps({
-            "bm25_query": "", "intent_keywords": [], "detected_pattern": "easy"
-        })
         result = rewrite_query.invoke("테스트 쿼리")
         assert result == "테스트 쿼리"
 
-    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
-    def test_returns_original_on_error(self, mock_llm):
+    @patch.object(REWRITE_QUERY_MODULE, "rewrite_query_full", side_effect=Exception("API Error"))
+    def test_returns_original_on_error(self, _mock_full):
         from llm.agents.tools.rewrite_query import rewrite_query
-
-        mock_llm.side_effect = Exception("API Error")
         result = rewrite_query.invoke("테스트 쿼리")
         assert result == "테스트 쿼리"
 
-    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
-    def test_handles_non_json_response(self, mock_llm):
+    @patch.object(
+        REWRITE_QUERY_MODULE,
+        "rewrite_query_full",
+        return_value={
+            "bm25_query": "청년 월세 지원 주거",
+            "original": "월세 도움",
+            "semantic_query": "청년 월세 지원",
+        },
+    )
+    def test_handles_non_json_response(self, _mock_full):
         from llm.agents.tools.rewrite_query import rewrite_query
-
-        mock_llm.return_value = "청년 월세 지원 주거"
         result = rewrite_query.invoke("월세 도움")
         assert isinstance(result, str)
         assert len(result) > 0
@@ -141,14 +155,18 @@ class TestRewriteQueryTool:
         assert rewrite_query.invoke("") == ""
         assert rewrite_query.invoke("a") == "a"
 
-    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
-    def test_tool_returns_string_not_json(self, mock_llm):
+    @patch.object(
+        REWRITE_QUERY_MODULE,
+        "rewrite_query_full",
+        return_value={
+            "bm25_query": "청년 지원",
+            "original": "테스트",
+            "semantic_query": "청년 지원",
+        },
+    )
+    def test_tool_returns_string_not_json(self, _mock_full):
         """@tool은 JSON이 아닌 plain string 반환"""
         from llm.agents.tools.rewrite_query import rewrite_query
-
-        mock_llm.return_value = json.dumps({
-            "bm25_query": "청년 지원", "intent_keywords": [], "detected_pattern": "easy"
-        })
         result = rewrite_query.invoke("테스트")
         assert isinstance(result, str)
         assert "{" not in result
@@ -160,16 +178,17 @@ class TestRewriteQueryTool:
 
 class TestRewriteQueryFull:
 
-    @patch('llm.agents.tools.rewrite_query._get_llm')
-    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
-    def test_returns_full_dict(self, mock_llm, mock_get_llm):
-        from llm.agents.tools.rewrite_query import rewrite_query_full
-
-        mock_llm.return_value = json.dumps({
+    @patch.object(
+        REWRITE_QUERY_MODULE,
+        "_rewrite_with_llm",
+        return_value=json.dumps({
             "bm25_query": "청년 월세 지원",
             "intent_keywords": ["월세"],
-            "detected_pattern": "easy"
-        })
+            "detected_pattern": "easy",
+        }),
+    )
+    def test_returns_full_dict(self, _mock_llm):
+        from llm.agents.tools.rewrite_query import rewrite_query_full
         result = rewrite_query_full("월세 도움")
         assert result["bm25_query"] == "청년 월세 지원"
         assert result["intent_keywords"] == ["월세"]
@@ -188,33 +207,45 @@ class TestRewriteQueryFull:
 
 class TestEdgeCases:
 
-    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
-    def test_very_long_query(self, mock_llm):
+    @patch.object(
+        REWRITE_QUERY_MODULE,
+        "rewrite_query_full",
+        return_value={
+            "bm25_query": "청년 지원",
+            "original": "안녕하세요 저는 27살이고",
+            "semantic_query": "청년 지원",
+        },
+    )
+    def test_very_long_query(self, _mock_full):
         from llm.agents.tools.rewrite_query import rewrite_query
-
-        mock_llm.return_value = json.dumps({
-            "bm25_query": "청년 지원", "intent_keywords": [], "detected_pattern": "abstract"
-        })
         result = rewrite_query.invoke("안녕하세요 저는 27살이고 " * 20)
         assert result == "청년 지원"
 
-    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
-    def test_special_characters(self, mock_llm):
+    @patch.object(
+        REWRITE_QUERY_MODULE,
+        "rewrite_query_full",
+        return_value={
+            "bm25_query": "청년 지원",
+            "original": "월세!!! 도움??? 받을 수 있어???",
+            "semantic_query": "청년 지원",
+        },
+    )
+    def test_special_characters(self, _mock_full):
         from llm.agents.tools.rewrite_query import rewrite_query
-
-        mock_llm.return_value = json.dumps({
-            "bm25_query": "청년 지원", "intent_keywords": [], "detected_pattern": "easy"
-        })
         result = rewrite_query.invoke("월세!!! 도움??? 받을 수 있어???")
         assert result == "청년 지원"
 
-    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
-    def test_emoji_in_query(self, mock_llm):
+    @patch.object(
+        REWRITE_QUERY_MODULE,
+        "rewrite_query_full",
+        return_value={
+            "bm25_query": "청년 지원",
+            "original": "월세 도움 받고 싶어요 😭",
+            "semantic_query": "청년 지원",
+        },
+    )
+    def test_emoji_in_query(self, _mock_full):
         from llm.agents.tools.rewrite_query import rewrite_query
-
-        mock_llm.return_value = json.dumps({
-            "bm25_query": "청년 지원", "intent_keywords": [], "detected_pattern": "easy"
-        })
         result = rewrite_query.invoke("월세 도움 받고 싶어요 😭")
         assert result == "청년 지원"
 

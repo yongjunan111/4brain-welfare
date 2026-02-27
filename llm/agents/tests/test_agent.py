@@ -7,7 +7,6 @@ BRAIN4-29 AC 검증:
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 # ============================================================================
@@ -178,35 +177,61 @@ class TestTools:
         assert "age" in result
         assert "interests" in result
     
-    @patch('llm.agents.tools.rewrite_query._rewrite_with_llm')
-    def test_rewrite_query_stub(self, mock_llm):
+    def test_rewrite_query_stub(self, monkeypatch):
         """rewrite_query 반환값 확인"""
+        import importlib
         from llm.agents.tools import rewrite_query
         import json
+        rewrite_module = importlib.import_module("llm.agents.tools.rewrite_query")
 
         # Mock LLM 응답
-        mock_llm.return_value = json.dumps({
-            "bm25_query": "청년 월세 지원 주거 보조금",
-            "intent_keywords": ["월세", "지원"],
-            "detected_pattern": "easy"
-        })
+        monkeypatch.setattr(
+            rewrite_module,
+            "_rewrite_with_llm",
+            lambda _query: json.dumps({
+                "bm25_query": "청년 월세 지원 주거 보조금",
+                "intent_keywords": ["월세", "지원"],
+                "detected_pattern": "easy"
+            }),
+        )
 
         result = rewrite_query.invoke("월세 도움 받을 수 있어?")
 
         assert isinstance(result, str)
         assert result == "청년 월세 지원 주거 보조금"
     
-    def test_search_policies(self):
+    def test_search_policies(self, monkeypatch):
         """search_policies 반환값 확인"""
+        import importlib
         from llm.agents.tools import search_policies
-        
+        search_module = importlib.import_module("llm.agents.tools.search_policies")
+
+        class DummyBackend:
+            def search(self, query: str, top_k: int = 10):
+                return {
+                    "original_query": query,
+                    "rewritten_query": "청년 월세 지원",
+                    "result_count": 1,
+                    "policies": [
+                        {
+                            "policy_id": "P1",
+                            "title": "청년월세지원",
+                            "description": "설명",
+                            "category": "주거",
+                            "district": "서울특별시",
+                            "age_min": 19,
+                            "age_max": 39,
+                            "apply_url": "https://example.com",
+                        }
+                    ],
+                }
+
+        monkeypatch.setattr(search_module, "get_search_backend", lambda: DummyBackend())
         result = search_policies.invoke({"query": "청년 월세", "top_k": 5})
-        
-        assert isinstance(result, list)
-        assert len(result) > 0
-        # 더미 데이터 필드 확인
-        assert "policy_id" in result[0]
-        assert "title" in result[0]
+
+        assert isinstance(result, str)
+        assert "청년월세지원" in result
+        assert "검색 결과: 1건" in result
     
     def test_check_eligibility_stub(self):
         """check_eligibility stub 반환값 확인"""
