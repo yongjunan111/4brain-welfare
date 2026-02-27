@@ -64,7 +64,7 @@ class ExtractResult(TypedDict):
     household_size: int | None
     housing_type: str | None
     interests: list[str] | None
-    special_conditions: list[str]
+    special_conditions: list[str] | None
 
 
 # ============================================================================
@@ -292,6 +292,7 @@ EMPLOYMENT_NORMALIZE = {
 
 # 보건복지부 연도별 기준중위소득(월, 원) - 1~7인 가구
 # 매년 1월 보건복지부 고시 기준 수동 갱신 필요
+# backend matching 기준표와 동일한 값을 유지해야 운영 정합성이 보장됩니다.
 MEDIAN_INCOME_WON_BY_YEAR: dict[int, dict[int, int]] = {
     2021: {
         1: 1827831,
@@ -341,9 +342,9 @@ MEDIAN_INCOME_WON_BY_YEAR: dict[int, dict[int, int]] = {
     2026: {
         1: 2564238,
         2: 4199292,
-        3: 5359036,
-        4: 6494738,
-        5: 7556719,
+        3: 5367880,
+        4: 6509816,
+        5: 7571462,
         6: 8555952,
         7: 9515150,
     },
@@ -560,8 +561,12 @@ def _parse_json_response(raw_response: str) -> ExtractResult:
             result["interests"] = None
         else:
             result["interests"] = raw_interests if isinstance(raw_interests, list) else []
-        conditions = payload.get("special_conditions", [])
-        result["special_conditions"] = conditions if isinstance(conditions, list) else []
+
+        raw_conditions = payload.get("special_conditions") if "special_conditions" in payload else None
+        if raw_conditions is None:
+            result["special_conditions"] = None
+        else:
+            result["special_conditions"] = raw_conditions if isinstance(raw_conditions, list) else []
         return result
 
     except (json.JSONDecodeError, TypeError, ValueError):
@@ -1176,8 +1181,9 @@ def _post_process(result: ExtractResult, message: str | None = None) -> ExtractR
         interests = _infer_interests_from_message(message)
     normalized["interests"] = interests
 
-    conditions = _normalize_special_conditions(result.get("special_conditions"))
-    if not conditions and isinstance(message, str) and message.strip():
+    raw_special_conditions = result.get("special_conditions")
+    conditions = _normalize_special_conditions(raw_special_conditions)
+    if raw_special_conditions is None and isinstance(message, str) and message.strip():
         conditions = _infer_special_conditions_from_message(message)
     normalized["special_conditions"] = conditions
 

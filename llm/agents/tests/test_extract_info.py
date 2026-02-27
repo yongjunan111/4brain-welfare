@@ -103,6 +103,24 @@ class TestParseJsonResponse:
         result = _parse_json_response(raw)
         assert result["interests"] is None
 
+    def test_special_conditions_missing_keeps_none(self):
+        from llm.agents.tools.extract_info import _parse_json_response
+
+        raw = json.dumps(
+            {
+                "age": 27,
+                "residence": "강남구",
+                "employment_status": "구직중",
+                "income_raw": None,
+                "household_size": None,
+                "housing_type": None,
+                "interests": [],
+            },
+            ensure_ascii=False,
+        )
+        result = _parse_json_response(raw)
+        assert result["special_conditions"] is None
+
 
 # ============================================================================
 # Unit: 후처리 (_post_process)
@@ -298,6 +316,22 @@ class TestPostProcessSpecialConditions:
         payload["special_conditions"] = raw
         result = _post_process(payload)
         assert result["special_conditions"] == expected
+
+    def test_special_conditions_explicit_empty_kept_without_fallback(self):
+        from llm.agents.tools.extract_info import _empty_result, _post_process
+
+        payload = _empty_result()
+        payload["special_conditions"] = []
+        result = _post_process(payload, message="장애인 정책도 있나요?")
+        assert result["special_conditions"] == []
+
+    def test_special_conditions_missing_fallback_infers_from_message(self):
+        from llm.agents.tools.extract_info import _empty_result, _post_process
+
+        payload = _empty_result()
+        payload["special_conditions"] = None
+        result = _post_process(payload, message="장애인 정책도 있나요?")
+        assert result["special_conditions"] == ["장애"]
 
 
 class TestPostProcessIncomeAgeInterests:
