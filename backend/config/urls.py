@@ -22,6 +22,7 @@ from django.db import connection
 from accounts.views import GoogleLogin, FindUsernameView, PasswordResetConfirmRedirectView, AxesLockedLoginView, CustomPasswordResetView, clean_logout
 
 
+
 def health_check(request):
     """Docker healthcheck 용 엔드포인트. DB 연결 확인 포함."""
     try:
@@ -30,10 +31,11 @@ def health_check(request):
     except Exception as e:
         return JsonResponse({"status": "error", "detail": str(e)}, status=503)
 
+
 urlpatterns = [
     path('api/health/', health_check),
     path('admin/', admin.site.urls),
-    path('api/policies/', include('policies.urls')), # 'api/' 중복 제거 (include 안에서 처리하는지 확인 필요하나 기존 유지)
+    path('api/policies/', include('policies.urls')),
     path('api/accounts/', include('accounts.urls')), # 기존 커스텀 (유지)
     
     # dj-rest-auth & allauth

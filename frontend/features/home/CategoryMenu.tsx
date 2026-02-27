@@ -2,9 +2,11 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { HOME_CATEGORIES } from "./home.types";
 
 export function CategoryMenu() {
+  const router = useRouter();
   return (
     <section className="mb-11">
       <div className="flex flex-wrap items-center justify-center gap-6">
@@ -18,7 +20,7 @@ export function CategoryMenu() {
               key={c.key}
               className="flex w-[92px] flex-col items-center gap-2 text-xs text-gray-700"
               type="button"
-              onClick={() => console.log("category:", c.key)}
+              onClick={() => router.push(`/policy?category=${c.key}`)}
             >
               {/* ✅ 링 기준 좌표계(48 고정) */}
               <span

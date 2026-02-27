@@ -95,3 +95,30 @@ class Policy(models.Model):
 
     def __str__(self):
         return self.title  # [RENAME] self.plcy_nm → self.title
+
+
+class MapTheme(models.Model):
+    theme_id = models.CharField(max_length=50, unique=True, help_text="스마트 서울맵 테마 ID")
+    name = models.CharField(max_length=100, help_text="테마 이름 (예: [동행]청년공간)")
+    
+    # Original data backup (JSON) for theme metadata including SUBCATE icons
+    metadata = models.JSONField(default=dict, blank=True, help_text="API 원본 테마 데이터")
+
+    def __str__(self):
+        return self.name
+
+
+class MapPOI(models.Model):
+    theme = models.ForeignKey(MapTheme, on_delete=models.CASCADE, related_name="pois")
+    name = models.CharField(max_length=200, help_text="장소명")
+    latitude = models.FloatField(help_text="위도 (WGS84)")
+    longitude = models.FloatField(help_text="경도 (WGS84)")
+    address = models.CharField(max_length=500, blank=True, help_text="주소")
+    phone = models.CharField(max_length=50, blank=True, help_text="연락처")
+    detail_url = models.URLField(blank=True, help_text="상세 정보 URL")
+    
+    # Original data backup (JSON)
+    original_data = models.JSONField(default=dict, blank=True, help_text="API 원본 데이터")
+
+    def __str__(self):
+        return self.name

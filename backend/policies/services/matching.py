@@ -170,11 +170,14 @@ def _match_policies_core(
     scored_policies.sort(key=lambda x: -x[1])
 
     # Step 6: 카테고리별 분산 선택
-    final_results = _select_diverse_categories(
-        scored_policies,
-        max_per_category=max_per_category,
-        limit=limit,
-    )
+    if limit is None:
+        # [BRAIN4-35] 전체보기: 다양성 선택 스킵, 점수순 전체 반환 (페이지네이션은 뷰에서 처리)
+        final_results = scored_policies
+    else:
+        # 챗봇/홈 추천: 카테고리별 분산 선택 적용
+        final_results = _select_diverse_categories(
+            scored_policies, max_per_category=max_per_category, limit=limit
+        )
 
     return final_results
 

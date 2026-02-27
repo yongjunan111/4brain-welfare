@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { fetchPolicies } from "./policy.api";
 import { Policy, PolicyCategory } from "./policy.types";
 import { PolicyCard } from "./PolicyCard";
@@ -9,29 +10,33 @@ import { Pagination } from "@/components/common/Pagination";
 
 const CATEGORY_OPTIONS: Array<{ value: PolicyCategory | "all"; label: string }> = [
     { value: "all", label: "전체" },
-    { value: "housing", label: "주거" },
-    { value: "finance", label: "생활·금융" },
     { value: "job", label: "일자리" },
-    { value: "entrepreneurship", label: "창업" },
-    { value: "mental-health", label: "정신건강" },
-    { value: "emotional-wellbeing", label: "마음건강" },
-    { value: "care-protection", label: "보호·돌봄" },
+    { value: "housing", label: "주거" },
+    { value: "education", label: "교육" },
+    { value: "welfare", label: "복지·문화" },
+    { value: "participation", label: "참여·권리" },
 ];
 
 export function PolicySearchPageClient() {
-    const [q, setQ] = useState("");
-    const [category, setCategory] = useState<PolicyCategory | "all">("all");
-    const [region, setRegion] = useState("");
-    const [page, setPage] = useState(1); // ✅ 페이지 상태 추가
+    const searchParams = useSearchParams();
 
+    // ✅ URL 파라미터로 초기 상태 설정
+    const initialQ = searchParams.get("q") || "";
+    const initialCategory = (searchParams.get("category") as PolicyCategory | "all") || "all";
+
+    const [q, setQ] = useState(initialQ);
+    const [category, setCategory] = useState<PolicyCategory | "all">(initialCategory);
+    const [region, setRegion] = useState("");
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(12); // ✅ 페이지 크기 상태 추가
     const [items, setItems] = useState<Policy[]>([]);
-    const [totalCount, setTotalCount] = useState(0); // ✅ 전체 개수 상태 추가
+    const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(false);
 
     // ✅ 검색 조건 변경 시 1페이지로 리셋
     useEffect(() => {
         setPage(1);
-    }, [q, category, region]);
+    }, [q, category, region, pageSize]); // pageSize 변경 시에도 리셋
 
     // ✅ 데이터 로드 (페이지 변경 포함)
     useEffect(() => {
@@ -45,6 +50,7 @@ export function PolicySearchPageClient() {
                     category,
                     region,
                     page,
+                    page_size: pageSize, // ✅ 페이지 크기 전달
                 });
                 if (alive) {
                     setItems(policies);
@@ -58,7 +64,7 @@ export function PolicySearchPageClient() {
         return () => {
             alive = false;
         };
-    }, [q, category, region, page]);
+    }, [q, category, region, page, pageSize]);
 
     const countText = useMemo(() => {
         if (loading) return "불러오는 중...";
@@ -67,21 +73,12 @@ export function PolicySearchPageClient() {
 
     return (
         <div className="mx-auto w-full max-w-[1280px] px-4 py-8">
-            {/* ✅ 상단 검색 바 (스크린샷 느낌: 버튼 + 셀렉트 + 인풋 + 검색버튼) */}
+            {/* ✅ 상단 검색 바 */}
             <section className="mb-8">
                 <div className="flex w-full items-center gap-2 rounded-xl border bg-white p-3">
-                    <button
-                        type="button"
-                        className="rounded-lg bg-gray-800 px-3 py-2 text-xs text-white"
-                        onClick={() => {
-                            // TODO: 맞춤형 검색 팝업/로그인 연동 등
-                            console.log("맞춤형 검색");
-                        }}
-                    >
-                        맞춤형 검색하기
-                    </button>
+                    {/* ... (기존 검색 필드들) ... */}
 
-                    {/* region - 지금은 간단 */}
+                    {/* region */}
                     <select
                         className="h-9 rounded-lg border px-2 text-xs text-gray-700"
                         value={region}
@@ -116,18 +113,28 @@ export function PolicySearchPageClient() {
                     <button
                         type="button"
                         className="h-9 rounded-lg bg-gray-800 px-4 text-xs text-white"
-                        onClick={() => {
-                            // ✅ 이미 q/category/region 변경 시 자동 검색되지만,
-                            // 버튼 UX가 필요하니 남겨둠(필요하면 debounce 적용)
-                            console.log("검색");
-                        }}
+                        onClick={() => console.log("검색")}
                     >
                         검색
                     </button>
                 </div>
 
-                <div className="mt-2 w-full text-right text-[11px] text-gray-500">
-                    {countText}
+                <div className="mt-2 flex items-center justify-between">
+                    {/* 페이지 당 개수 선택 (좌측) */}
+                    <select
+                        className="h-8 rounded-lg border px-2 text-[11px] text-gray-600 outline-none"
+                        value={pageSize}
+                        onChange={(e) => setPageSize(Number(e.target.value))}
+                    >
+                        <option value={8}>8개씩 보기</option>
+                        <option value={12}>12개씩 보기</option>
+                        <option value={16}>16개씩 보기</option>
+                        <option value={24}>24개씩 보기</option>
+                    </select>
+
+                    <div className="text-[11px] text-gray-500">
+                        {countText}
+                    </div>
                 </div>
             </section>
 
@@ -150,7 +157,7 @@ export function PolicySearchPageClient() {
             <Pagination
                 currentPage={page}
                 totalCount={totalCount}
-                itemsPerPage={12}
+                itemsPerPage={pageSize}
                 onPageChange={setPage}
             />
         </div>
