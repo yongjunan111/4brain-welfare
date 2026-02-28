@@ -35,10 +35,15 @@ def _user(**overrides):
     return user
 
 
-def _invoke(policies, user_info):
-    from llm.agents.tools.check_eligibility import check_eligibility
+def _default_fetcher(_policy_ids):
+    return []
 
-    raw = check_eligibility.invoke(
+
+def _invoke(policies, user_info, policy_fetcher=None):
+    from llm.agents.tools.check_eligibility import create_check_eligibility
+
+    tool = create_check_eligibility(policy_fetcher or _default_fetcher)
+    raw = tool.invoke(
         {
             "policies": json.dumps(policies, ensure_ascii=False),
             "user_info": json.dumps(user_info, ensure_ascii=False),
@@ -48,10 +53,11 @@ def _invoke(policies, user_info):
     return json.loads(raw)
 
 
-def _invoke_raw(policies_raw: str, user_info_raw: str):
-    from llm.agents.tools.check_eligibility import check_eligibility
+def _invoke_raw(policies_raw: str, user_info_raw: str, policy_fetcher=None):
+    from llm.agents.tools.check_eligibility import create_check_eligibility
 
-    raw = check_eligibility.invoke(
+    tool = create_check_eligibility(policy_fetcher or _default_fetcher)
+    raw = tool.invoke(
         {
             "policies": policies_raw,
             "user_info": user_info_raw,

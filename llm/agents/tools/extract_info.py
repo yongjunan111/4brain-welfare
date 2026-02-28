@@ -21,15 +21,6 @@ from llm.agents.prompts.extract_info import (
     EXTRACT_INFO_SYSTEM_PROMPT_SHORT,
 )
 
-try:
-    from langfuse.decorators import observe
-except ImportError:
-    def observe(*_args, **_kwargs):  # type: ignore[override]
-        """Langfuse 미설치 환경용 no-op 데코레이터."""
-        def _decorator(func):
-            return func
-        return _decorator
-
 
 # ============================================================================
 # 설정
@@ -455,7 +446,6 @@ def _get_llm(model: str = DEFAULT_MODEL, temperature: float = DEFAULT_TEMPERATUR
     return ChatOpenAI(model=model, temperature=temperature)
 
 
-@observe(name="extract_info_llm")
 def _extract_with_llm(
     message: str,
     model: str = DEFAULT_MODEL,

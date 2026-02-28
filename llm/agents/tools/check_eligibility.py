@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, Callable, Optional
 
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
 
 # 소득 코드 상수 (backend/policies/services/matching_keys.py와 동일 값 유지)
 INCOME_ANY = "0043001"
@@ -23,6 +23,9 @@ YOUTH_AGE_MAX_BOUNDARY = 39
 
 SEOUL_WIDE_DISTRICTS = {"서울", "서울시", "서울특별시"}
 logger = logging.getLogger(__name__)
+
+
+PolicyFetcher = Callable[[Optional[list[str]]], list[dict]]
 
 
 def _safe_int(value: Any) -> int | None:
@@ -168,78 +171,106 @@ def _judge(details: dict[str, dict[str, Any]]) -> tuple[bool | None, list[str]]:
     return True, []
 
 
-@tool
-def check_eligibility(policies: str, user_info: str) -> str:
-    """
-    검색된 정책에 대해 사용자 자격요건을 룰베이스로 판정한다.
+def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
+    """policy_fetcher를 주입받아 check_eligibility 도구를 생성한다."""
 
-    Args:
-        policies: search_policies 결과 JSON 문자열 (정책 dict 리스트)
-        user_info: extract_info 결과 JSON 문자열 (사용자 정보 dict)
+    @tool
+    def check_eligibility(policies: str, user_info: str) -> str:
+        """
+        검색된 정책에 대해 사용자 자격요건을 룰베이스로 판정한다.
 
-    Returns:
-        판정 결과 JSON 문자열 (정책별 is_eligible + reasons + details)
-    """
-    try:
-        policies_list = json.loads(policies)
-        info = json.loads(user_info)
-    except (json.JSONDecodeError, TypeError) as exc:
-        return json.dumps(
-            {
-                "error": f"입력 파싱 실패: {str(exc)}",
-                "policies_checked": 0,
-            },
-            ensure_ascii=False,
-        )
+        Args:
+            policies: search_policies 결과 JSON 문자열 또는 "all"/"all_policies"
+            user_info: extract_info 결과 JSON 문자열 (사용자 정보 dict)
 
-    if not isinstance(policies_list, list):
-        return json.dumps(
-            {
-                "error": "입력 타입 실패: policies는 JSON 리스트여야 합니다.",
-                "policies_checked": 0,
-            },
-            ensure_ascii=False,
-        )
-    if not isinstance(info, dict):
-        return json.dumps(
-            {
-                "error": "입력 타입 실패: user_info는 JSON 객체여야 합니다.",
-                "policies_checked": 0,
-            },
-            ensure_ascii=False,
-        )
-
-    # NOTE: user_info 필드명은 USER_INFO_SCHEMA.md 확정 스키마 기준 (income, residence)
-    user_age = _safe_int(info.get("age"))
-    user_income = _safe_int(info.get("income"))
-    user_residence = _normalize_text(info.get("residence"))
-
-    results: list[dict[str, Any]] = []
-    for idx, policy_item in enumerate(policies_list):
-        if not isinstance(policy_item, dict):
-            logger.warning(
-                "invalid policy item skipped. index=%s item_type=%s",
-                idx,
-                type(policy_item).__name__,
+        Returns:
+            판정 결과 JSON 문자열 (정책별 is_eligible + reasons + details)
+        """
+        try:
+            info = json.loads(user_info)
+        except (json.JSONDecodeError, TypeError) as exc:
+            return json.dumps(
+                {
+                    "error": f"user_info 파싱 실패: {str(exc)}",
+                    "policies_checked": 0,
+                },
+                ensure_ascii=False,
             )
-            continue
-        policy = policy_item
 
-        details = {
-            "age": _check_age(policy, user_age),
-            "income": _check_income(policy, user_income),
-            "region": _check_region(policy, user_residence),
-        }
-        is_eligible, reasons = _judge(details)
+        if not isinstance(info, dict):
+            return json.dumps(
+                {
+                    "error": "user_info는 JSON 객체여야 합니다.",
+                    "policies_checked": 0,
+                },
+                ensure_ascii=False,
+            )
 
-        results.append(
-            {
-                "policy_id": policy.get("policy_id", ""),
-                "title": policy.get("title", ""),
-                "is_eligible": is_eligible,
-                "reasons": reasons,
-                "details": details,
+        if isinstance(policies, str) and policies.strip() in ("all", "all_policies"):
+            try:
+                policies_list = policy_fetcher(None)
+            except Exception as exc:
+                return json.dumps(
+                    {
+                        "error": f"policy fetch 실패: {str(exc)}",
+                        "policies_checked": 0,
+                    },
+                    ensure_ascii=False,
+                )
+        else:
+            try:
+                policies_list = json.loads(policies)
+            except (json.JSONDecodeError, TypeError) as exc:
+                return json.dumps(
+                    {
+                        "error": f"policies 파싱 실패: {str(exc)}",
+                        "policies_checked": 0,
+                    },
+                    ensure_ascii=False,
+                )
+
+        if not isinstance(policies_list, list):
+            return json.dumps(
+                {
+                    "error": "policies는 JSON 리스트여야 합니다.",
+                    "policies_checked": 0,
+                },
+                ensure_ascii=False,
+            )
+
+        # NOTE: user_info 필드명은 USER_INFO_SCHEMA.md 확정 스키마 기준 (income, residence)
+        user_age = _safe_int(info.get("age"))
+        user_income = _safe_int(info.get("income"))
+        user_residence = _normalize_text(info.get("residence"))
+
+        results: list[dict[str, Any]] = []
+        for idx, policy_item in enumerate(policies_list):
+            if not isinstance(policy_item, dict):
+                logger.warning(
+                    "invalid policy item skipped. index=%s item_type=%s",
+                    idx,
+                    type(policy_item).__name__,
+                )
+                continue
+            policy = policy_item
+
+            details = {
+                "age": _check_age(policy, user_age),
+                "income": _check_income(policy, user_income),
+                "region": _check_region(policy, user_residence),
             }
-        )
+            is_eligible, reasons = _judge(details)
 
-    return json.dumps(results, ensure_ascii=False)
+            results.append(
+                {
+                    "policy_id": policy.get("policy_id", ""),
+                    "title": policy.get("title", ""),
+                    "is_eligible": is_eligible,
+                    "reasons": reasons,
+                    "details": details,
+                }
+            )
+
+        return json.dumps(results, ensure_ascii=False)
+
+    return check_eligibility

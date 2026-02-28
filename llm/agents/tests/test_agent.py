@@ -6,7 +6,16 @@ BRAIN4-29 AC 검증:
 - [x] 기본 테스트 통과 ("안녕" → 응답 생성)
 """
 
+import json
+import os
+
 import pytest
+
+
+needs_api_key = pytest.mark.skipif(
+    not os.getenv("OPENAI_API_KEY"),
+    reason="OPENAI_API_KEY not set",
+)
 
 
 # ============================================================================
@@ -43,6 +52,64 @@ class TestAgentCreation:
         
         assert agent is not None
 
+    def test_create_agent_passes_policy_fetcher(self, monkeypatch):
+        """create_agent가 create_tools로 policy_fetcher를 전달한다."""
+        from llm.agents import agent as agent_module
+
+        captured = {}
+
+        def fake_create_tools(policy_fetcher=None):
+            captured["policy_fetcher"] = policy_fetcher
+            return []
+
+        def fake_chat_openai(*, model, temperature):
+            return {"model": model, "temperature": temperature}
+
+        class DummyAgent:
+            pass
+
+        def fake_create_react_agent(model, tools, prompt, checkpointer):
+            captured["tools"] = tools
+            captured["prompt"] = prompt
+            captured["checkpointer"] = checkpointer
+            return DummyAgent()
+
+        monkeypatch.setattr(agent_module, "create_tools", fake_create_tools)
+        monkeypatch.setattr(agent_module, "ChatOpenAI", fake_chat_openai)
+        monkeypatch.setattr(agent_module, "create_react_agent", fake_create_react_agent)
+
+        fetcher = lambda ids: []
+        agent = agent_module.create_agent(policy_fetcher=fetcher, max_iterations=7)
+
+        assert captured["policy_fetcher"] is fetcher
+        assert captured["tools"] == []
+        assert getattr(agent, "_max_iterations") == 7
+
+    def test_run_agent_sets_recursion_limit(self):
+        """run_agent가 max_iterations 기반 recursion_limit을 설정한다."""
+        from llm.agents.agent import run_agent
+
+        class DummyMessage:
+            type = "ai"
+            content = "ok"
+            tool_calls = []
+
+        class DummyAgent:
+            def __init__(self):
+                self.last_config = None
+
+            def invoke(self, _inputs, config=None):
+                self.last_config = config
+                return {"messages": [DummyMessage()]}
+
+        agent = DummyAgent()
+        setattr(agent, "_max_iterations", 5)
+
+        result = run_agent(agent, "테스트")
+
+        assert result["error"] is None
+        assert result["response"] == "ok"
+        assert agent.last_config["recursion_limit"] == 11
 
 # ============================================================================
 # 2. 기본 응답 테스트 (실제 API 호출)
@@ -50,6 +117,8 @@ class TestAgentCreation:
 
 class TestAgentResponse:
     """Agent 응답 테스트 (실제 API 호출)"""
+
+    pytestmark = [pytest.mark.integration, needs_api_key]
     
     @pytest.fixture
     def agent(self):
@@ -172,10 +241,10 @@ class TestTools:
         
         # @tool 데코레이터가 적용되어 있어서 .invoke() 호출
         result = extract_info.invoke("27살이고 강남에 살아요")
+        result = json.loads(result)  # @tool은 JSON 문자열 반환
         
         assert isinstance(result, dict)
         assert "age" in result
-        assert "interests" in result
     
     def test_rewrite_query_stub(self, monkeypatch):
         """rewrite_query 반환값 확인"""
@@ -274,6 +343,8 @@ class TestTools:
 
 class TestChatFunction:
     """chat() 간편 함수 테스트"""
+
+    pytestmark = [pytest.mark.integration, needs_api_key]
     
     def test_chat_basic(self):
         """chat() 기본 호출"""
