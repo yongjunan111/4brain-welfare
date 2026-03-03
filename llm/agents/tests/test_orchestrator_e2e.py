@@ -22,8 +22,8 @@ def _policy(**overrides):
 def _user_info(**overrides) -> str:
     user = {
         "age": 27,
-        "income": 2400,
-        "residence": "강남구",
+        "income_level": 2400,
+        "district": "강남구",
     }
     user.update(overrides)
     return json.dumps(user, ensure_ascii=False)
@@ -112,3 +112,18 @@ def test_default_fetcher_returns_empty():
 
     raw = check_eligibility_tool.invoke({"policies": "all", "user_info": _user_info()})
     assert json.loads(raw) == []
+
+
+def test_matching_policies_all_fetcher_exception_returns_error():
+    from llm.agents.tools.check_eligibility import create_check_eligibility
+
+    def fetcher(_policy_ids):
+        raise RuntimeError("db unavailable")
+
+    tool = create_check_eligibility(fetcher)
+    raw = tool.invoke({"policies": "all", "user_info": _user_info()})
+    data = json.loads(raw)
+
+    assert "error" in data
+    assert "policy fetch 실패" in data["error"]
+    assert data["policies_checked"] == 0

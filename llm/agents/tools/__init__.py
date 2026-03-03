@@ -28,7 +28,9 @@ def create_tools(policy_fetcher: PolicyFetcher | None = None) -> list[BaseTool]:
 
 # 하위호환: 기본 fetcher로 생성된 정적 도구
 ALL_TOOLS = create_tools()
-check_eligibility = ALL_TOOLS[2]
+check_eligibility = next(
+    tool for tool in ALL_TOOLS if getattr(tool, "name", "") == "check_eligibility"
+)
 
 
 __all__ = [

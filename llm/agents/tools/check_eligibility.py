@@ -27,6 +27,29 @@ logger = logging.getLogger(__name__)
 
 PolicyFetcher = Callable[[Optional[list[str]]], list[dict]]
 
+NEED_CANONICAL_MAP = {
+    "일자리": "취업",
+    "취업": "취업",
+    "구직": "취업",
+    "창업": "창업",
+    "주거": "주거",
+    "금융": "금융",
+    "교육": "교육",
+    "문화": "문화",
+    "복지문화": "문화",
+    "건강": "건강",
+}
+
+NEED_KEYWORDS = {
+    "취업": ("취업", "일자리", "구직", "채용", "인턴", "면접", "고용"),
+    "창업": ("창업", "스타트업", "사업", "소상공", "창직"),
+    "주거": ("주거", "월세", "전세", "임대", "보증금", "주택", "원룸", "고시원"),
+    "금융": ("금융", "대출", "저축", "자금", "신용", "융자", "이자"),
+    "교육": ("교육", "학습", "훈련", "자격증", "강의", "학비", "학교"),
+    "문화": ("문화", "예술", "공연", "전시", "여가", "관람", "체육"),
+    "건강": ("건강", "의료", "병원", "심리", "상담", "치료", "검진"),
+}
+
 
 def _safe_int(value: Any) -> int | None:
     """LLM JSON에서 숫자가 문자열로 올 수 있으므로 방어적으로 정수 변환한다."""
@@ -54,6 +77,52 @@ def _normalize_text(value: Any) -> str:
     if not isinstance(value, str):
         return ""
     return value.strip()
+
+
+def _normalize_needs(value: Any) -> list[str]:
+    """needs/interests 값을 표준 카테고리로 정규화한다."""
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        token = item.strip()
+        if not token:
+            continue
+        canonical = NEED_CANONICAL_MAP.get(token, token)
+        if canonical in NEED_KEYWORDS and canonical not in normalized:
+            normalized.append(canonical)
+    return normalized
+
+
+def _policy_text(policy: dict[str, Any]) -> str:
+    """needs 매칭용 텍스트를 구성한다."""
+    parts: list[str] = []
+    for key in ("category", "category_name", "title", "summary", "description", "support_content"):
+        value = policy.get(key)
+        if isinstance(value, str) and value.strip():
+            parts.append(value.strip())
+
+    tags = policy.get("tags")
+    if isinstance(tags, list):
+        parts.extend(str(tag).strip() for tag in tags if isinstance(tag, str) and tag.strip())
+
+    return " ".join(parts).lower()
+
+
+def _policy_matches_need(policy: dict[str, Any], needs: list[str]) -> bool:
+    """정책이 needs 카테고리 중 하나와 매칭되는지 판단한다."""
+    if not needs:
+        return True
+    text = _policy_text(policy)
+    if not text:
+        return False
+    for need in needs:
+        keywords = NEED_KEYWORDS.get(need, ())
+        if any(keyword in text for keyword in keywords):
+            return True
+    return False
 
 
 def _check_age(policy: dict[str, Any], user_age: int | None) -> dict[str, Any]:
@@ -206,7 +275,8 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
                 ensure_ascii=False,
             )
 
-        if isinstance(policies, str) and policies.strip() in ("all", "all_policies"):
+        is_all_mode = isinstance(policies, str) and policies.strip() in ("all", "all_policies")
+        if is_all_mode:
             try:
                 policies_list = policy_fetcher(None)
             except Exception as exc:
@@ -238,10 +308,27 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
                 ensure_ascii=False,
             )
 
-        # NOTE: user_info 필드명은 USER_INFO_SCHEMA.md 확정 스키마 기준 (income, residence)
+        # NOTE: user_info는 호환 필드명을 허용한다.
+        # - district (정식) / residence (하위호환)
+        # - income_level (정식, 숫자형) / income (하위호환)
         user_age = _safe_int(info.get("age"))
-        user_income = _safe_int(info.get("income"))
-        user_residence = _normalize_text(info.get("residence"))
+        user_income = _safe_int(info.get("income_level"))
+        if user_income is None:
+            user_income = _safe_int(info.get("income"))
+
+        user_residence = _normalize_text(info.get("district"))
+        if not user_residence:
+            user_residence = _normalize_text(info.get("residence"))
+
+        user_needs = _normalize_needs(info.get("needs"))
+
+        # matching(all) 경로에서 needs가 있으면 정책 후보를 먼저 좁힌다.
+        if is_all_mode and user_needs:
+            policies_list = [
+                policy
+                for policy in policies_list
+                if isinstance(policy, dict) and _policy_matches_need(policy, user_needs)
+            ]
 
         results: list[dict[str, Any]] = []
         for idx, policy_item in enumerate(policies_list):

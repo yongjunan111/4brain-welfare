@@ -6,8 +6,11 @@ BRAIN4-29 AC 검증:
 - [x] 기본 테스트 통과 ("안녕" → 응답 생성)
 """
 
+import asyncio
 import json
 import os
+import sys
+import types
 
 import pytest
 
@@ -110,6 +113,65 @@ class TestAgentCreation:
         assert result["error"] is None
         assert result["response"] == "ok"
         assert agent.last_config["recursion_limit"] == 11
+
+    def test_create_agent_with_mcp_syncs_policy_fetcher_and_max_iterations(self, monkeypatch):
+        """create_agent_with_mcp가 create_agent와 주요 인자를 동기화한다."""
+        from llm.agents import agent as agent_module
+
+        captured = {}
+
+        class DummyMCPClient:
+            def __init__(self, config):
+                captured["mcp_config"] = config
+
+            async def get_tools(self):
+                class DummyMCPTool:
+                    name = "search_policies"
+
+                return [DummyMCPTool()]
+
+        client_module = types.ModuleType("langchain_mcp_adapters.client")
+        client_module.MultiServerMCPClient = DummyMCPClient
+        package_module = types.ModuleType("langchain_mcp_adapters")
+        package_module.client = client_module
+        monkeypatch.setitem(sys.modules, "langchain_mcp_adapters", package_module)
+        monkeypatch.setitem(sys.modules, "langchain_mcp_adapters.client", client_module)
+
+        class DummyTool:
+            def __init__(self, name):
+                self.name = name
+
+        def fake_create_tools(policy_fetcher=None):
+            captured["policy_fetcher"] = policy_fetcher
+            return [DummyTool("extract_info"), DummyTool("search_policies"), DummyTool("check_eligibility")]
+
+        def fake_chat_openai(*, model, temperature):
+            captured["temperature"] = temperature
+            return object()
+
+        class DummyAgent:
+            pass
+
+        def fake_create_react_agent(model, tools, prompt, checkpointer):
+            captured["tools"] = tools
+            return DummyAgent()
+
+        monkeypatch.setattr(agent_module, "create_tools", fake_create_tools)
+        monkeypatch.setattr(agent_module, "ChatOpenAI", fake_chat_openai)
+        monkeypatch.setattr(agent_module, "create_react_agent", fake_create_react_agent)
+
+        fetcher = lambda ids: []
+        agent = asyncio.run(
+            agent_module.create_agent_with_mcp(
+                policy_fetcher=fetcher,
+                max_iterations=7,
+                temperature=0,
+            )
+        )
+
+        assert captured["policy_fetcher"] is fetcher
+        assert captured["temperature"] == 0
+        assert getattr(agent, "_max_iterations") == 7
 
 # ============================================================================
 # 2. 기본 응답 테스트 (실제 API 호출)
@@ -324,8 +386,8 @@ class TestTools:
             "user_info": json.dumps(
                 {
                     "age": 27,
-                    "income": 2400,
-                    "residence": "강남구",
+                    "income_level": 2400,
+                    "district": "강남구",
                 },
                 ensure_ascii=False,
             ),

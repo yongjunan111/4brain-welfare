@@ -48,14 +48,12 @@ class ExtractResult(TypedDict):
     """extract_info 표준 출력 타입."""
 
     age: int | None
-    residence: str | None
+    district: str | None
     employment_status: str | None
-    income: int | None
+    income_level: int | None
     income_raw: str | None
     household_size: int | None
     housing_type: str | None
-    interests: list[str] | None
-    special_conditions: list[str] | None
 
 
 # ============================================================================
@@ -344,36 +342,6 @@ MEDIAN_INCOME_WON_BY_YEAR: dict[int, dict[int, int]] = {
 DEFAULT_MEDIAN_REFERENCE_YEAR = 2026
 DEFAULT_HOUSEHOLD_SIZE = 1
 
-VALID_INTERESTS = {"일자리", "주거", "교육", "복지문화", "참여권리", "기타"}
-INTEREST_KEYWORDS = {
-    "일자리": {
-        "취업",
-        "구직",
-        "취준",
-        "면접",
-        "이력서",
-        "일자리",
-        "채용",
-        "인턴",
-        "창업",
-        "사업",
-        "자영업",
-        "소상공",
-        "가게",
-        "스타트업",
-    },
-    "주거": {"주거", "월세", "전세", "임대", "보증금", "이사", "집", "방"},
-    "교육": {"교육", "학습", "학비", "훈련", "자격증", "학교", "대학", "강의"},
-    "복지문화": {"문화", "예술", "여가", "공연", "전시", "창작", "건강", "의료", "심리", "정신건강", "상담", "마음"},
-    "기타": {"금융", "대출", "저축", "자산", "통장", "돈", "생활비"},
-}
-
-VALID_SPECIAL_CONDITIONS = {"신혼", "한부모", "장애", "다자녀", "저소득", "차상위", "기초수급", "중소기업", "군인"}
-SPECIAL_CONDITION_NORMALIZE = {
-    "장애인": "장애",
-    "기초수급자": "기초수급",
-    "수급자": "기초수급",
-}
 
 VALID_HOUSING_TYPES = {"전세", "월세", "자가"}
 HOUSING_NORMALIZE = {
@@ -396,14 +364,12 @@ def _empty_result() -> ExtractResult:
 
     return {
         "age": None,
-        "residence": None,
+        "district": None,
         "employment_status": None,
-        "income": None,
+        "income_level": None,
         "income_raw": None,
         "household_size": None,
         "housing_type": None,
-        "interests": [],
-        "special_conditions": [],
     }
 
 
@@ -537,26 +503,15 @@ def _parse_json_response(raw_response: str) -> ExtractResult:
         raw_age = payload.get("age")
         result["age"] = raw_age if isinstance(raw_age, int) and not isinstance(raw_age, bool) else None
 
-        raw_residence = payload.get("residence")
-        result["residence"] = raw_residence if isinstance(raw_residence, str) else None
+        # district 우선, residence는 하위호환 fallback
+        raw_district = payload.get("district") if "district" in payload else payload.get("residence")
+        result["district"] = raw_district if isinstance(raw_district, str) else None
 
         result["employment_status"] = cast(str | None, payload.get("employment_status"))
-        result["income"] = cast(int | None, payload.get("income"))
+        result["income_level"] = cast(int | None, payload.get("income_level") or payload.get("income"))
         result["income_raw"] = cast(str | None, payload.get("income_raw"))
         result["household_size"] = cast(int | None, payload.get("household_size"))
         result["housing_type"] = cast(str | None, payload.get("housing_type"))
-
-        raw_interests = payload.get("interests") if "interests" in payload else None
-        if raw_interests is None:
-            result["interests"] = None
-        else:
-            result["interests"] = raw_interests if isinstance(raw_interests, list) else []
-
-        raw_conditions = payload.get("special_conditions") if "special_conditions" in payload else None
-        if raw_conditions is None:
-            result["special_conditions"] = None
-        else:
-            result["special_conditions"] = raw_conditions if isinstance(raw_conditions, list) else []
         return result
 
     except (json.JSONDecodeError, TypeError, ValueError):
@@ -1011,125 +966,6 @@ def _normalize_housing_type(value: Any) -> str | None:
     return None
 
 
-def _normalize_special_condition_token(value: str) -> str | None:
-    """특수조건 토큰을 canonical 값으로 정규화합니다."""
-
-    token = value.strip()
-    if not token:
-        return None
-    if token in VALID_SPECIAL_CONDITIONS:
-        return token
-
-    compact = re.sub(r"\s+", "", token)
-    if compact in SPECIAL_CONDITION_NORMALIZE:
-        return SPECIAL_CONDITION_NORMALIZE[compact]
-
-    if "장애" in compact:
-        return "장애"
-    if any(keyword in compact for keyword in ("기초수급", "수급자")):
-        return "기초수급"
-    if "한부모" in compact:
-        return "한부모"
-    if "신혼" in compact:
-        return "신혼"
-    if any(keyword in compact for keyword in ("저소득", "소득없", "소득없어")):
-        return "저소득"
-    if "다자녀" in compact:
-        return "다자녀"
-    if "차상위" in compact:
-        return "차상위"
-    if "중소기업" in compact:
-        return "중소기업"
-    if "군인" in compact:
-        return "군인"
-    return None
-
-
-def _normalize_special_conditions(value: Any) -> list[str]:
-    """special_conditions 값을 정규화합니다."""
-
-    if not isinstance(value, list):
-        return []
-
-    normalized: list[str] = []
-    for item in value:
-        if not isinstance(item, str):
-            continue
-        canonical = _normalize_special_condition_token(item)
-        if canonical and canonical not in normalized:
-            normalized.append(canonical)
-    return normalized
-
-
-def _infer_special_conditions_from_message(message: str) -> list[str]:
-    """메시지에서 특수조건을 보수적으로 추정합니다."""
-
-    compact = re.sub(r"\s+", "", message)
-    inferred: list[str] = []
-
-    condition_patterns: list[tuple[str, tuple[str, ...]]] = [
-        ("신혼", ("신혼",)),
-        ("한부모", ("한부모",)),
-        ("장애", ("장애인", "장애")),
-        ("다자녀", ("다자녀",)),
-        ("저소득", ("저소득", "소득없", "소득없어")),
-        ("차상위", ("차상위",)),
-        ("기초수급", ("기초수급", "기초수급자", "수급자")),
-        ("중소기업", ("중소기업",)),
-        ("군인", ("군인",)),
-    ]
-
-    for canonical, keywords in condition_patterns:
-        if any(keyword in compact for keyword in keywords):
-            inferred.append(canonical)
-
-    return inferred
-
-
-def _normalize_interest_token(value: str) -> str | None:
-    """관심사 토큰을 허용 카테고리로 정규화합니다."""
-
-    token = value.strip()
-    if not token:
-        return None
-    if token in VALID_INTERESTS:
-        return token
-
-    compact = re.sub(r"\s+", "", token)
-    for canonical, keywords in INTEREST_KEYWORDS.items():
-        if compact in keywords or any(keyword in compact for keyword in keywords):
-            return canonical
-    return None
-
-
-def _normalize_interests(value: Any) -> list[str]:
-    """interests 값을 정규화합니다."""
-
-    if not isinstance(value, list):
-        return []
-
-    normalized: list[str] = []
-    for item in value:
-        if not isinstance(item, str):
-            continue
-        canonical = _normalize_interest_token(item)
-        if canonical and canonical not in normalized:
-            normalized.append(canonical)
-
-    return normalized
-
-
-def _infer_interests_from_message(message: str) -> list[str]:
-    """메시지 텍스트에서 관심사를 보수적으로 추정합니다."""
-
-    text = re.sub(r"\s+", "", message)
-    inferred: list[str] = []
-    for canonical, keywords in INTEREST_KEYWORDS.items():
-        if any(keyword in text for keyword in keywords):
-            inferred.append(canonical)
-    return inferred
-
-
 def _post_process(result: ExtractResult, message: str | None = None) -> ExtractResult:
     """
     LLM 출력값을 deterministic하게 정규화합니다.
@@ -1144,7 +980,7 @@ def _post_process(result: ExtractResult, message: str | None = None) -> ExtractR
 
     normalized = _empty_result()
     normalized["age"] = _normalize_age(result.get("age"))
-    normalized["residence"] = _normalize_residence(result.get("residence"))
+    normalized["district"] = _normalize_residence(result.get("district"))
     normalized["employment_status"] = _normalize_employment(result.get("employment_status"))
     normalized["income_raw"] = (
         result.get("income_raw")
@@ -1154,28 +990,16 @@ def _post_process(result: ExtractResult, message: str | None = None) -> ExtractR
     normalized["housing_type"] = _normalize_housing_type(result.get("housing_type"))
     normalized["household_size"] = _normalize_household_size_field(result.get("household_size"))
 
-    normalized["income"] = _normalize_income(
+    normalized["income_level"] = _normalize_income(
         normalized["income_raw"],
         message=message,
         household_size=normalized["household_size"],
     )
 
-    # TODO: income이 None이고 employment_status가 "무직"인 경우,
+    # TODO: income_level이 None이고 employment_status가 "무직"인 경우,
     #       check_eligibility에서 소득 필터 스킵 처리 필요 (extract_info는 추출만)
     if normalized["household_size"] is None and isinstance(message, str) and message.strip():
         normalized["household_size"] = _extract_household_size(message)
-
-    raw_interests = result.get("interests")
-    interests = _normalize_interests(raw_interests)
-    if raw_interests is None and isinstance(message, str) and message.strip():
-        interests = _infer_interests_from_message(message)
-    normalized["interests"] = interests
-
-    raw_special_conditions = result.get("special_conditions")
-    conditions = _normalize_special_conditions(raw_special_conditions)
-    if raw_special_conditions is None and isinstance(message, str) and message.strip():
-        conditions = _infer_special_conditions_from_message(message)
-    normalized["special_conditions"] = conditions
 
     return normalized
 
@@ -1189,14 +1013,12 @@ def _is_empty_result(result: ExtractResult) -> bool:
 
     return (
         result.get("age") is None
-        and result.get("residence") is None
+        and result.get("district") is None
         and result.get("employment_status") is None
-        and result.get("income") is None
+        and result.get("income_level") is None
         and result.get("income_raw") is None
         and result.get("household_size") is None
         and result.get("housing_type") is None
-        and not result.get("interests")
-        and not result.get("special_conditions")
     )
 
 

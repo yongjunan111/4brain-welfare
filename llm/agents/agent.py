@@ -79,11 +79,13 @@ def create_agent(
 
 async def create_agent_with_mcp(
     model: str = "gpt-4o-mini",
-    temperature: float = 0.3,
+    temperature: float = 0,
     use_short_prompt: bool = False,
     checkpointer: Optional[MemorySaver] = None,
     mcp_command: Optional[str] = None,
     mcp_args: Optional[list[str]] = None,
+    max_iterations: int = 5,
+    policy_fetcher: PolicyFetcher | None = None,
 ):
     """
     MCP 경유 모드 Agent 생성.
@@ -91,6 +93,7 @@ async def create_agent_with_mcp(
     - 오케스트레이터는 그대로 두고 (로컬 실행)
     - search 도구는 MCP 서버 도구를 사용 (내부 rewrite 포함)
     - matching 경로(extract_info/check_eligibility)는 로컬 도구 유지
+    - create_agent와 동일하게 max_iterations/policy_fetcher를 지원
     """
     try:
         from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -119,7 +122,7 @@ async def create_agent_with_mcp(
     # search는 MCP로 대체하고, rewrite는 search 내부로 통합했으므로 로컬에서 제외
     local_tools = [
         tool
-        for tool in create_tools()
+        for tool in create_tools(policy_fetcher)
         if getattr(tool, "name", "") not in {"rewrite_query", "search_policies"}
     ]
     tools = [*local_tools, *mcp_tools]
@@ -141,6 +144,7 @@ async def create_agent_with_mcp(
         checkpointer=checkpointer,
     )
 
+    setattr(agent, "_max_iterations", max_iterations)
     setattr(agent, "_mcp_client", mcp_client)
     return agent
 
