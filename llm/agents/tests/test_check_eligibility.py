@@ -35,10 +35,15 @@ def _user(**overrides):
     return user
 
 
-def _invoke(policies, user_info):
-    from llm.agents.tools.check_eligibility import check_eligibility
+def _default_fetcher(_policy_ids):
+    return []
 
-    raw = check_eligibility.invoke(
+
+def _invoke(policies, user_info, policy_fetcher=None):
+    from llm.agents.tools.check_eligibility import create_check_eligibility
+
+    tool = create_check_eligibility(policy_fetcher or _default_fetcher)
+    raw = tool.invoke(
         {
             "policies": json.dumps(policies, ensure_ascii=False),
             "user_info": json.dumps(user_info, ensure_ascii=False),
@@ -48,10 +53,11 @@ def _invoke(policies, user_info):
     return json.loads(raw)
 
 
-def _invoke_raw(policies_raw: str, user_info_raw: str):
-    from llm.agents.tools.check_eligibility import check_eligibility
+def _invoke_raw(policies_raw: str, user_info_raw: str, policy_fetcher=None):
+    from llm.agents.tools.check_eligibility import create_check_eligibility
 
-    raw = check_eligibility.invoke(
+    tool = create_check_eligibility(policy_fetcher or _default_fetcher)
+    raw = tool.invoke(
         {
             "policies": policies_raw,
             "user_info": user_info_raw,
@@ -351,6 +357,38 @@ class TestErrorHandling:
         assert "error" in data
         assert "user_info는 JSON 객체" in data["error"]
         assert data["policies_checked"] == 0
+
+
+class TestNeedsFiltering:
+    def test_all_mode_filters_by_needs_category(self):
+        def fetcher(_policy_ids):
+            return [
+                _policy(policy_id="H1", title="청년월세지원", category="주거"),
+                _policy(policy_id="J1", title="청년취업지원", category="취업"),
+            ]
+
+        rows = _invoke_raw(
+            "all",
+            json.dumps(_user(needs=["주거"]), ensure_ascii=False),
+            policy_fetcher=fetcher,
+        )
+        assert isinstance(rows, list)
+        assert [row["policy_id"] for row in rows] == ["H1"]
+
+
+
+class TestUserInfoCompatibilityAliases:
+    def test_district_alias_is_used_for_region_check(self):
+        row = _first(_policy(district="강남구"), _user(residence=None, district="강남구"))
+        assert row["details"]["region"]["result"] is True
+
+    def test_income_level_numeric_alias_is_used_when_income_missing(self):
+        row = _first(
+            _policy(income_level="0043002", income_max=3600, district="서울"),
+            _user(income=None, income_level=2400),
+        )
+        assert row["details"]["income"]["result"] is True
+        assert row["is_eligible"] is True
 
 
 class TestOutputStructure:

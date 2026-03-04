@@ -20,7 +20,8 @@ from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 
-from .tools import ALL_TOOLS
+from .tools import create_tools
+from .tools.check_eligibility import PolicyFetcher
 from .prompts.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT, ORCHESTRATOR_SYSTEM_PROMPT_SHORT
 
 
@@ -30,9 +31,11 @@ from .prompts.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT, ORCHESTRATOR_SYSTE
 
 def create_agent(
     model: str = "gpt-4o-mini",
-    temperature: float = 0.3,
-    use_short_prompt: bool = False,
+    temperature: float = 0,
     checkpointer: Optional[MemorySaver] = None,
+    max_iterations: int = 5,
+    use_short_prompt: bool = False,
+    policy_fetcher: PolicyFetcher | None = None,
 ):
     """
     복지나침반 ReAct Agent 생성
@@ -40,8 +43,10 @@ def create_agent(
     Args:
         model: 사용할 모델 (기본: gpt-4o-mini)
         temperature: 응답 다양성 (0=결정적, 1=창의적)
-        use_short_prompt: True면 토큰 절약용 짧은 프롬프트 사용
         checkpointer: 대화 히스토리 저장용 (멀티턴 지원)
+        max_iterations: 최대 도구 반복 횟수(RecursionLimit 계산에 사용)
+        use_short_prompt: True면 토큰 절약용 짧은 프롬프트 사용
+        policy_fetcher: policies="all" 매칭용 정책 fetch 함수
     
     Returns:
         CompiledGraph (LangGraph Agent)
@@ -58,25 +63,29 @@ def create_agent(
         if use_short_prompt 
         else ORCHESTRATOR_SYSTEM_PROMPT
     )
+    tools = create_tools(policy_fetcher)
     
     # ReAct Agent 생성
     agent = create_react_agent(
         model=llm,
-        tools=ALL_TOOLS,
+        tools=tools,
         prompt=SystemMessage(content=system_prompt),
         checkpointer=checkpointer,
     )
+    setattr(agent, "_max_iterations", max_iterations)
     
     return agent
 
 
 async def create_agent_with_mcp(
     model: str = "gpt-4o-mini",
-    temperature: float = 0.3,
+    temperature: float = 0,
     use_short_prompt: bool = False,
     checkpointer: Optional[MemorySaver] = None,
     mcp_command: Optional[str] = None,
     mcp_args: Optional[list[str]] = None,
+    max_iterations: int = 5,
+    policy_fetcher: PolicyFetcher | None = None,
 ):
     """
     MCP 경유 모드 Agent 생성.
@@ -84,6 +93,7 @@ async def create_agent_with_mcp(
     - 오케스트레이터는 그대로 두고 (로컬 실행)
     - search 도구는 MCP 서버 도구를 사용 (내부 rewrite 포함)
     - matching 경로(extract_info/check_eligibility)는 로컬 도구 유지
+    - create_agent와 동일하게 max_iterations/policy_fetcher를 지원
     """
     try:
         from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -112,7 +122,7 @@ async def create_agent_with_mcp(
     # search는 MCP로 대체하고, rewrite는 search 내부로 통합했으므로 로컬에서 제외
     local_tools = [
         tool
-        for tool in ALL_TOOLS
+        for tool in create_tools(policy_fetcher)
         if getattr(tool, "name", "") not in {"rewrite_query", "search_policies"}
     ]
     tools = [*local_tools, *mcp_tools]
@@ -134,6 +144,7 @@ async def create_agent_with_mcp(
         checkpointer=checkpointer,
     )
 
+    setattr(agent, "_max_iterations", max_iterations)
     setattr(agent, "_mcp_client", mcp_client)
     return agent
 
@@ -148,6 +159,7 @@ async def close_agent_mcp(agent) -> None:
 # ============================================================================
 # Agent 실행
 # ============================================================================
+
 
 def run_agent(
     agent,
@@ -173,7 +185,12 @@ def run_agent(
         }
     """
     # 설정
-    config = {"configurable": {"thread_id": thread_id}}
+    max_iterations = getattr(agent, "_max_iterations", 5)
+    recursion_limit = max_iterations * 2 + 1
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": recursion_limit,
+    }
     
     # 입력 메시지
     inputs = {"messages": [HumanMessage(content=message)]}
