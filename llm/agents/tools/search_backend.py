@@ -79,6 +79,13 @@ def _doc_to_policy(doc: Document) -> dict[str, Any]:
     description = (doc.page_content or "")[:1200]
     support_content = metadata.get("plcySprtCn", "")
 
+    # earnMaxAmt: 정책 소득 상한(만원). 없으면 None.
+    raw_earn_max = metadata.get("earnMaxAmt")
+    try:
+        income_max_val: int | None = int(raw_earn_max) if raw_earn_max is not None else None
+    except (TypeError, ValueError):
+        income_max_val = None
+
     return {
         "policy_id": (metadata.get("plcyNo") or "").strip(),
         "title": title,
@@ -92,6 +99,7 @@ def _doc_to_policy(doc: Document) -> dict[str, Any]:
         "age_min": metadata.get("minAge"),
         "age_max": metadata.get("maxAge"),
         "income_level": metadata.get("earnCndSeCd", ""),
+        "income_max": income_max_val,
         "apply_start_date": None,
         "apply_end_date": None,
         "business_start_date": None,
@@ -113,10 +121,32 @@ def _normalize_policy_to_canonical(policy: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _filter_by_income_max(
+    policies: list[dict[str, Any]], income_max: int | None
+) -> list[dict[str, Any]]:
+    """Remove policies whose income_max is below the user's income threshold.
+
+    Policies without an income_max value are always retained (fail-open).
+    이는 earnCndSeCd='0043003'(기타) 등 earnMaxAmt가 없는 정책이
+    자연스럽게 통과하는 구조.
+    """
+    if income_max is None:
+        return policies
+    return [
+        p for p in policies
+        if p.get("income_max") is None or p["income_max"] >= income_max
+    ]
+
+
 class SearchBackend(Protocol):
     """Search backend protocol for adapter switching."""
 
-    def search(self, query: str, top_k: int = DEFAULT_TOP_K) -> dict[str, Any]:
+    def search(
+        self,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+        income_max: int | None = None,
+    ) -> dict[str, Any]:
         """Run policy search and return normalized result payload."""
 
 
@@ -130,7 +160,12 @@ class DirectSearchBackend:
             else use_reranker
         )
 
-    def search(self, query: str, top_k: int = DEFAULT_TOP_K) -> dict[str, Any]:
+    def search(
+        self,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+        income_max: int | None = None,
+    ) -> dict[str, Any]:
         """Search policies with local retrievers."""
         original_query = (query or "").strip()
         if not original_query:
@@ -147,6 +182,7 @@ class DirectSearchBackend:
         policies = [_normalize_policy_to_canonical(_doc_to_policy(doc)) for doc in docs][
             :normalized_top_k
         ]
+        policies = _filter_by_income_max(policies, income_max)
 
         return {
             "original_query": original_query,
@@ -207,7 +243,12 @@ class MCPSearchBackend:
         self.port = self._parse_port(port)
         self.timeout_seconds = max(float(timeout_seconds), 0.1)
 
-    def search(self, query: str, top_k: int = DEFAULT_TOP_K) -> dict[str, Any]:
+    def search(
+        self,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+        income_max: int | None = None,
+    ) -> dict[str, Any]:
         """Search policies through MCP server and return canonical payload."""
         original_query = (query or "").strip()
         if not original_query:
@@ -271,10 +312,9 @@ class MCPSearchBackend:
                 for policy in policies
                 if isinstance(policy, dict)
             ][:normalized_top_k]
+            normalized_policies = _filter_by_income_max(normalized_policies, income_max)
 
-            result_count = parsed.get("result_count")
-            if not isinstance(result_count, int):
-                result_count = len(normalized_policies)
+            result_count = len(normalized_policies)
 
             return {
                 "original_query": str(parsed.get("original_query") or original_query),
