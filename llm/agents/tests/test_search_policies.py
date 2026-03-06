@@ -475,7 +475,7 @@ class TestIncomeMaxFiltering:
             {"policy_id": "P2", "income_max": 5000},
             {"policy_id": "P3", "income_max": None},
         ]
-        result = _filter_by_income_max(policies, income_max=4000)
+        result = _filter_by_income_max(policies, user_income=4000)
         ids = [p["policy_id"] for p in result]
         assert ids == ["P2", "P3"]
 
@@ -486,7 +486,7 @@ class TestIncomeMaxFiltering:
             {"policy_id": "P1", "income_max": 3000},
             {"policy_id": "P2", "income_max": 5000},
         ]
-        result = _filter_by_income_max(policies, income_max=None)
+        result = _filter_by_income_max(policies, user_income=None)
         assert len(result) == 2
 
     @patch("llm.agents.tools.search_backend.rewrite_query_internal", return_value="청년 지원")

@@ -248,7 +248,10 @@ def normalize_user_info(user_info: dict) -> dict:
     if not normalized.get('job_code'):
         emp_status = normalized.get('employment_status', '')
         if emp_status:
-            mapped_job = JOB_KOREAN_TO_CODE.get(str(emp_status).strip())
+            mapped_job = (
+                JOB_KOREAN_TO_CODE.get(str(emp_status).strip())
+                or JOB_STATUS_TO_CODE.get(str(emp_status).strip())
+            )
             if mapped_job:
                 normalized['job_code'] = mapped_job
 

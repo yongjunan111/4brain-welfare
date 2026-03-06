@@ -122,7 +122,7 @@ def _normalize_policy_to_canonical(policy: dict[str, Any]) -> dict[str, Any]:
 
 
 def _filter_by_income_max(
-    policies: list[dict[str, Any]], income_max: int | None
+    policies: list[dict[str, Any]], user_income: int | None
 ) -> list[dict[str, Any]]:
     """Remove policies whose income_max is below the user's income threshold.
 
@@ -130,11 +130,11 @@ def _filter_by_income_max(
     이는 earnCndSeCd='0043003'(기타) 등 earnMaxAmt가 없는 정책이
     자연스럽게 통과하는 구조.
     """
-    if income_max is None:
+    if user_income is None:
         return policies
     return [
         p for p in policies
-        if p.get("income_max") is None or p["income_max"] >= income_max
+        if p.get("income_max") is None or p["income_max"] >= user_income
     ]
 
 
