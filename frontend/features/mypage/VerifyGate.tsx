@@ -1,53 +1,115 @@
-// features/mypage/VerifyGate.tsx
-
 "use client";
 
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { setVerified } from "./mypage.api";
+import { api } from "@/services/axios";
+import { setVerified, getMyProfile } from "./mypage.api";
 
 export function VerifyGate() {
     const router = useRouter();
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [hasPassword, setHasPassword] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
 
-    async function onVerify() {
-        await setVerified();
-        router.push("/mypage/secure");
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            try {
+                const profile = await getMyProfile();
+                if (mounted) setHasPassword(profile.hasPassword ?? true);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                if (mounted) setLoading(false);
+            }
+        })();
+        return () => { mounted = false; };
+    }, []);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError("");
+        setSubmitting(true);
+
+        try {
+            const res = await api.post("/api/accounts/verify-password/", { password });
+            const token = res.data.reauth_token;
+            await setVerified(token);
+            router.replace("/mypage/secure");
+        } catch (err: any) {
+            setError(err.response?.data?.error || "비밀번호 검증에 실패했습니다.");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleSocialAuth = async () => {
+        try {
+            setSubmitting(true);
+            const res = await api.post("/api/accounts/verify-social/");
+            const token = res.data.reauth_token;
+            await setVerified(token);
+            router.replace("/mypage/secure");
+        } catch (err: any) {
+            console.error("소셜 재인증 오류:", err);
+            setError(err.response?.data?.error || "소셜 계정 인증에 실패했습니다.");
+            setSubmitting(false);
+        }
+    };
+
+    if (loading) return <div className="p-10 text-center">확인 중...</div>;
+
+    if (!hasPassword) {
+        return (
+            <div className="mx-auto max-w-md space-y-6 pt-10">
+                <h1 className="text-2xl font-bold">본인 확인</h1>
+                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <p className="mb-6 text-sm text-gray-600">
+                        소셜 로그인 계정입니다. 개인정보 보호를 위해 재인증(확인)을 진행합니다.
+                    </p>
+                    {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
+                    <button
+                        onClick={handleSocialAuth}
+                        disabled={submitting}
+                        className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                        {submitting ? "인증 처리 중..." : "인증하고 접근하기"}
+                    </button>
+                </div>
+            </div>
+        );
     }
 
     return (
-        <div className="space-y-6">
-            <div className="text-sm text-gray-500">홈 &gt; 마이페이지 &gt; 나의정보관리 &gt; 내 정보 수정하기</div>
-            <h1 className="text-3xl font-bold">내 정보 수정하기</h1>
+        <div className="mx-auto max-w-md space-y-6 pt-10">
+            <h1 className="text-2xl font-bold">본인 확인</h1>
+            <p className="text-sm text-gray-500">개인정보 보호를 위해 비밀번호를 다시 입력해주세요.</p>
 
-            <div className="rounded-2xl bg-gray-50 p-5 text-sm text-gray-600">
-                <ul className="list-disc space-y-1 pl-5">
-                    <li>중요 개인정보는 본인 인증 후 수정할 수 있습니다.</li>
-                    <li>회원정보 보호를 위해 인증 절차를 진행합니다.</li>
-                </ul>
-            </div>
+            <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="mb-4">
+                    <label className="mb-2 block text-sm font-medium text-gray-900">비밀번호</label>
+                    <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-blue-500 focus:outline-none"
+                        placeholder="비밀번호 입력"
+                        required
+                    />
+                </div>
 
-            <div className="rounded-2xl border bg-white p-6">
-                <div className="mb-4 text-lg font-bold">본인 인증하기</div>
+                {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
 
                 <button
-                    type="button"
-                    onClick={onVerify}
-                    className="flex w-full items-center justify-between rounded-xl border p-5 hover:bg-gray-50"
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                 >
-                    <div className="flex items-center gap-3">
-                        <div className="grid h-10 w-10 place-items-center rounded-lg bg-gray-100">👤</div>
-                        <div className="text-left">
-                            <div className="font-semibold">휴대폰 인증</div>
-                            <div className="text-sm text-gray-500">본인 휴대폰정보 인증 후 수정하실 수 있습니다.</div>
-                        </div>
-                    </div>
-                    <span className="text-gray-400">›</span>
+                    {submitting ? "확인 중..." : "확인"}
                 </button>
-            </div>
-
-            <Link href="/mypage" className="inline-block text-sm text-gray-600 hover:underline">
-                마이페이지로 돌아가기
-            </Link>
+            </form>
         </div>
     );
 }
