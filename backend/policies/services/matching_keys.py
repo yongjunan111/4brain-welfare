@@ -73,6 +73,11 @@ JOB_STATUS_TO_KOREAN = {
     'freelancer': '프리랜서',
 }
 
+# 역방향: 한글 → 코드 (챗봇 extract_info → matching 연동용)
+JOB_KOREAN_TO_CODE: dict[str, str] = {
+    v: JOB_STATUS_TO_CODE[k] for k, v in JOB_STATUS_TO_KOREAN.items()
+}
+
 
 # =============================================================================
 # 학력상태 코드 매핑
@@ -123,6 +128,12 @@ EDUCATION_ALSO_MATCH = {
 MARRIAGE_STATUS_TO_CODE = {
     'married': '0055001',  # 기혼
     'single': '0055002',   # 미혼
+}
+
+# 역방향: 한글 → 코드
+MARRIAGE_STATUS_TO_KOREAN: dict[str, str] = {'married': '기혼', 'single': '미혼'}
+MARRIAGE_KOREAN_TO_CODE: dict[str, str] = {
+    v: MARRIAGE_STATUS_TO_CODE[k] for k, v in MARRIAGE_STATUS_TO_KOREAN.items()
 }
 
 
@@ -232,6 +243,25 @@ def normalize_user_info(user_info: dict) -> dict:
             )
             if mapped:
                 normalized['education_code'] = mapped
+
+    # 취업상태 한글 → job_code 보강 (job_code 없을 때만)
+    if not normalized.get('job_code'):
+        emp_status = normalized.get('employment_status', '')
+        if emp_status:
+            mapped_job = (
+                JOB_KOREAN_TO_CODE.get(str(emp_status).strip())
+                or JOB_STATUS_TO_CODE.get(str(emp_status).strip())
+            )
+            if mapped_job:
+                normalized['job_code'] = mapped_job
+
+    # 결혼상태 한글 → marriage_code 보강 (marriage_code 없을 때만)
+    if not normalized.get('marriage_code'):
+        mrg_status = normalized.get('marriage_status', '')
+        if mrg_status:
+            mapped_mrg = MARRIAGE_KOREAN_TO_CODE.get(str(mrg_status).strip())
+            if mapped_mrg:
+                normalized['marriage_code'] = mapped_mrg
 
     raw_conditions = normalized.get('special_conditions', [])
     if raw_conditions:

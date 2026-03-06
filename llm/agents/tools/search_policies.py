@@ -61,13 +61,23 @@ def _format_for_orchestrator(result: dict[str, Any]) -> str:
 
 
 @tool
-def search_policies(query: str, top_k: int = DEFAULT_TOP_K) -> str:
-    """Search policies via selected backend and return orchestrator-formatted text."""
+def search_policies(
+    query: str,
+    top_k: int = DEFAULT_TOP_K,
+    income_max: int | None = None,
+) -> str:
+    """Search policies via selected backend and return orchestrator-formatted text.
+
+    Args:
+        query: 검색 키워드
+        top_k: 반환할 최대 정책 수
+        income_max: 사용자 소득(만원). 설정 시 income_max 미만인 정책 제외.
+    """
     normalized_top_k = normalize_top_k(top_k)
     backend = get_search_backend()
 
     try:
-        result = backend.search(query=query, top_k=normalized_top_k)
+        result = backend.search(query=query, top_k=normalized_top_k, income_max=income_max)
     except NotImplementedError:
         logger.error("Search backend is not implemented for current configuration.")
         return "검색 백엔드가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요."

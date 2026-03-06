@@ -415,7 +415,7 @@ class TestSearchPoliciesTool:
             def __init__(self):
                 self.calls = []
 
-            def search(self, query: str, top_k: int = 10):
+            def search(self, query: str, top_k: int = 10, income_max: int | None = None):
                 self.calls.append((query, top_k))
                 return {
                     "original_query": query,
@@ -450,7 +450,7 @@ class TestSearchPoliciesTool:
         search_module = importlib.import_module("llm.agents.tools.search_policies")
 
         class DummyBackend:
-            def search(self, query: str, top_k: int = 10):
+            def search(self, query: str, top_k: int = 10, income_max: int | None = None):
                 return {
                     "original_query": query,
                     "rewritten_query": query,
@@ -462,6 +462,49 @@ class TestSearchPoliciesTool:
 
         result = search_policies.invoke({"query": "없는 정책", "top_k": 5})
         assert result == "검색 결과 없음"
+
+
+class TestIncomeMaxFiltering:
+    """income_max 후필터링 동작 테스트"""
+
+    def test_filter_removes_low_income_max_policies(self):
+        from llm.agents.tools.search_backend import _filter_by_income_max
+
+        policies = [
+            {"policy_id": "P1", "income_max": 3000},
+            {"policy_id": "P2", "income_max": 5000},
+            {"policy_id": "P3", "income_max": None},
+        ]
+        result = _filter_by_income_max(policies, user_income=4000)
+        ids = [p["policy_id"] for p in result]
+        assert ids == ["P2", "P3"]
+
+    def test_filter_none_income_max_returns_all(self):
+        from llm.agents.tools.search_backend import _filter_by_income_max
+
+        policies = [
+            {"policy_id": "P1", "income_max": 3000},
+            {"policy_id": "P2", "income_max": 5000},
+        ]
+        result = _filter_by_income_max(policies, user_income=None)
+        assert len(result) == 2
+
+    @patch("llm.agents.tools.search_backend.rewrite_query_internal", return_value="청년 지원")
+    def test_direct_backend_applies_income_max(self, _mock_rewrite):
+        from llm.agents.tools.search_backend import DirectSearchBackend
+
+        doc_with_earn = _make_doc(1)
+        doc_with_earn.metadata["earnMaxAmt"] = 3000
+
+        doc_no_earn = _make_doc(2)
+
+        backend = DirectSearchBackend(use_reranker=True)
+        with patch.object(backend, "_search_with_bge", return_value=[doc_with_earn, doc_no_earn]):
+            result = backend.search("지원", top_k=5, income_max=4000)
+
+        ids = [p["policy_id"] for p in result["policies"]]
+        assert "P2" in ids  # income_max=None → 유지
+        assert "P1" not in ids  # income_max=3000 < 4000 → 제외
 
 
 needs_openai_key = pytest.mark.skipif(

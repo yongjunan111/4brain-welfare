@@ -1,3 +1,4 @@
+import os
 from unittest.mock import patch
 from django.test import TestCase, SimpleTestCase
 from django.contrib.auth.models import User
@@ -389,12 +390,138 @@ class TestMedianIncomeConversion(SimpleTestCase):
         """가구원수 None → None"""
         self.assertIsNone(_annual_income_to_median_pct(3000, None))
 
-    def test_household_7_capped_to_6(self):
-        """가구원수 7 → 6인으로 cap"""
+    def test_household_7_uses_7person_table(self):
+        """가구원수 7 → 7인 테이블 사용 (6인과 다름)"""
         result_7 = _annual_income_to_median_pct(5000, 7)
         result_6 = _annual_income_to_median_pct(5000, 6)
-        self.assertEqual(result_7, result_6)
+        self.assertIsNotNone(result_7)
+        self.assertNotEqual(result_7, result_6)
 
     def test_household_0_returns_none(self):
         """가구원수 0 → None"""
         self.assertIsNone(_annual_income_to_median_pct(3000, 0))
+
+    def test_household_8_capped_to_7(self):
+        """가구원수 8 → 7인으로 cap"""
+        result_8 = _annual_income_to_median_pct(5000, 8)
+        result_7 = _annual_income_to_median_pct(5000, 7)
+        self.assertEqual(result_8, result_7)
+
+
+# =============================================================================
+# [BRAIN4-43] 한글 매핑 정규화 테스트
+# =============================================================================
+from policies.services.matching_keys import (
+    JOB_KOREAN_TO_CODE,
+    MARRIAGE_KOREAN_TO_CODE,
+)
+
+
+class TestNormalizeEmploymentMarriage(SimpleTestCase):
+    """employment/marriage 한글 → 코드 매핑 테스트"""
+
+    def test_employment_재직_to_code(self):
+        """한글 '재직' → job_code 보강"""
+        result = normalize_user_info({'employment_status': '재직'})
+        self.assertEqual(result['job_code'], '0013001')
+
+    def test_marriage_미혼_to_code(self):
+        """한글 '미혼' → marriage_code 보강"""
+        result = normalize_user_info({'marriage_status': '미혼'})
+        self.assertEqual(result['marriage_code'], '0055002')
+
+    def test_existing_job_code_preserved(self):
+        """기존 job_code 있으면 덮어쓰지 않음"""
+        result = normalize_user_info({
+            'employment_status': '재직',
+            'job_code': '0013003',
+        })
+        self.assertEqual(result['job_code'], '0013003')
+
+    def test_unsupported_korean_skipped(self):
+        """미지원 한글이면 job_code 보강 안 함"""
+        result = normalize_user_info({'employment_status': '알바'})
+        self.assertNotIn('job_code', result)
+
+
+# =============================================================================
+# [BRAIN4-43] 소득 임계값 3600 경계 테스트
+# =============================================================================
+from policies.services.matching import _get_relevant_categories
+
+
+class TestIncomeThresholdBoundary(SimpleTestCase):
+    """소득 임계값 3600 경계 테스트"""
+
+    def test_3599_includes_복지문화(self):
+        """income=3599 → '복지문화' 포함"""
+        cats = _get_relevant_categories({'income': 3599})
+        self.assertIn('복지문화', cats)
+
+    def test_3600_excludes_복지문화(self):
+        """income=3600 → '복지문화' 미포함"""
+        cats = _get_relevant_categories({'income': 3600})
+        self.assertNotIn('복지문화', cats)
+
+    def test_none_income_excludes_복지문화(self):
+        """income=None → '복지문화' 미포함"""
+        cats = _get_relevant_categories({})
+        self.assertNotIn('복지문화', cats)
+
+
+# =============================================================================
+# [BRAIN4-43] deprecated match_policies() warning 테스트
+# =============================================================================
+import warnings
+from policies.services.matching import match_policies
+
+
+class TestDeprecatedMatchPolicies(SimpleTestCase):
+    """deprecated match_policies() DeprecationWarning 발생 확인"""
+
+    class DummyProfile:
+        def to_matching_dict(self):
+            return {'age': 25}
+
+    @patch('policies.services.matching._match_policies_core', return_value=[])
+    def test_warning_emitted(self, _mock_core):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            match_policies(self.DummyProfile())
+        self.assertTrue(any(issubclass(x.category, DeprecationWarning) for x in w))
+
+
+# =============================================================================
+# [BRAIN4-43] 중위소득 정합성 테스트 (matching.py vs extract_info.py)
+# =============================================================================
+import sys
+import importlib
+
+
+class TestMedianIncomeConsistency(SimpleTestCase):
+    """matching.py vs extract_info.py 2026년 중위소득 값 일치 확인"""
+
+    def test_2026_values_match(self):
+        from policies.services.matching import _MEDIAN_INCOME_2026_MONTHLY
+
+        # extract_info.py를 직접 import (Django 외부 모듈)
+        llm_root = os.path.join(
+            os.path.dirname(__file__), '..', '..', 'llm',
+        )
+        added_path = os.path.abspath(os.path.join(llm_root, '..'))
+        sys.path.insert(0, added_path)
+        try:
+            spec = importlib.util.find_spec('llm.agents.tools.extract_info')
+            if spec is None:
+                self.skipTest('llm.agents.tools.extract_info not importable')
+            module = importlib.import_module('llm.agents.tools.extract_info')
+            extract_table = module.MEDIAN_INCOME_WON_BY_YEAR[2026]
+        finally:
+            sys.path.remove(added_path)
+
+        for size in _MEDIAN_INCOME_2026_MONTHLY:
+            self.assertEqual(
+                _MEDIAN_INCOME_2026_MONTHLY[size],
+                extract_table[size],
+                f"Mismatch for household size {size}",
+            )

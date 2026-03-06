@@ -12,6 +12,7 @@
 """
 import logging
 import re
+import warnings
 from django.db.models import Q
 from policies.models import Policy
 from policies.services.matching_keys import (
@@ -108,6 +109,12 @@ def match_policies(profile, exclude_policy_ids=None, include_category=None, limi
     Returns:
         list of (Policy, score) tuples
     """
+    warnings.warn(
+        "match_policies() is deprecated. "
+        "Use match_policies_for_web() or match_policies_for_chatbot() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     user_info = profile.to_matching_dict()
     return _match_policies_core(
         user_info,
@@ -127,7 +134,7 @@ def _match_policies_core(
     exclude_policy_ids=None,
     include_category=None,
     limit=None,
-    max_per_category=2,
+    max_per_category=None,
 ):
     """
     정책 매칭 핵심 로직 (내부 함수)
@@ -339,6 +346,7 @@ _MEDIAN_INCOME_2026_MONTHLY = {
     4: 6_509_816,
     5: 7_571_462,
     6: 8_555_952,
+    7: 9_515_150,
 }
 
 
@@ -357,8 +365,8 @@ def _annual_income_to_median_pct(annual_income_man_won, household_size) -> float
         return None
     if household_size <= 0:
         return None
-    # 6인 초과 → 6인 cap
-    capped_size = min(household_size, 6)
+    # 7인 초과 → 7인 cap
+    capped_size = min(household_size, 7)
     monthly_median = _MEDIAN_INCOME_2026_MONTHLY.get(capped_size)
     if monthly_median is None:
         return None

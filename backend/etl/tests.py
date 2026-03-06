@@ -189,3 +189,42 @@ class PolicyOverrideDecisionSheetTests(SimpleTestCase):
             entry['education_status'],
             '0049001,0049002,0049003,0049004,0049005,0049006,0049007,0049008',
         )
+
+
+# =============================================================================
+# [BRAIN4-43] 64건 override golden test (data-driven)
+# =============================================================================
+from etl.services.overrides import apply_overrides
+from policies.services.matching_keys import KNOWN_EDUCATION_CODES, KNOWN_JOB_CODES
+
+
+class PolicyOverrideGoldenTests(SimpleTestCase):
+    """64건 override 데이터 순회, apply_overrides() 결과 검증"""
+
+    def test_all_overrides_apply_successfully(self):
+        """모든 override가 정상 적용되고, 결과가 known 코드만 포함"""
+        for policy_id, overrides in POLICY_FIELD_OVERRIDES.items():
+            # unknown 코드로 원본 구성 (override 전 상태 시뮬레이션)
+            fields = {
+                'education_status': '0049009',
+                'employment_status': '0013009',
+            }
+            updated, logs = apply_overrides(policy_id, fields)
+
+            for field, expected_value in overrides.items():
+                self.assertEqual(
+                    updated[field],
+                    expected_value,
+                    f"{policy_id}.{field}: expected {expected_value}, got {updated[field]}",
+                )
+
+                # 결과 코드가 모두 known인지 검증
+                codes = {c.strip() for c in expected_value.split(',')}
+                if field == 'education_status':
+                    unknown = codes - KNOWN_EDUCATION_CODES
+                else:
+                    unknown = codes - KNOWN_JOB_CODES
+                self.assertFalse(
+                    unknown,
+                    f"{policy_id}.{field}: unknown codes {unknown}",
+                )
