@@ -22,6 +22,17 @@ from policies.services.matching_keys import (
 
 logger = logging.getLogger(__name__)
 
+# 연도 보정 대상: 올해 기준으로 2년 전/1년 전 → 올해로 보정
+YEAR_FIX_TARGET = date.today().year
+
+
+def _safe_replace_year(d: date, target_year: int) -> date:
+    """연도 교체 (Feb 29 → Feb 28 fallback for non-leap target years)"""
+    try:
+        return d.replace(year=target_year)
+    except ValueError:
+        return d.replace(year=target_year, month=2, day=28)
+
 
 # 나이 추론 규칙 (키워드 기반)
 AGE_RULES = [
@@ -305,22 +316,18 @@ class PolicyTransformer:
 
     def _parse_date_with_year_fix(self, value: str) -> Optional[date]:
         """
-        날짜 정제 + 연도 보정
+        날짜 정제 + 연도 보정 (동적)
 
-        예: "20240916" → date(2026, 9, 16)
-            "20250630" → date(2026, 6, 30)
-            "20260101" → date(2026, 1, 1)
+        YEAR_FIX_TARGET-2, YEAR_FIX_TARGET-1 연도를 YEAR_FIX_TARGET으로 보정.
+        윤년 Feb 29 → Feb 28 fallback 포함.
         """
         if not value or len(value) != 8:
             return None
 
         try:
             parsed = datetime.strptime(value, '%Y%m%d').date()
-            # 회의 결정 반영: 2024는 +2년, 2025는 +1년
-            if parsed.year == 2024:
-                parsed = parsed.replace(year=parsed.year + 2)
-            elif parsed.year == 2025:
-                parsed = parsed.replace(year=parsed.year + 1)
+            if parsed.year in {YEAR_FIX_TARGET - 2, YEAR_FIX_TARGET - 1}:
+                parsed = _safe_replace_year(parsed, YEAR_FIX_TARGET)
             return parsed
         except ValueError:
             return None
@@ -356,15 +363,15 @@ class PolicyTransformer:
 
     def _normalize_text_years(self, value: str) -> str:
         """
-        텍스트에 포함된 연도 표기를 운영 연도 기준으로 보정.
-        - 2024 -> 2026
-        - 2025 -> 2026
+        텍스트에 포함된 연도 표기를 운영 연도 기준으로 동적 보정.
+        YEAR_FIX_TARGET-2, YEAR_FIX_TARGET-1 → YEAR_FIX_TARGET
         """
         if not value:
             return ''
 
-        normalized = re.sub(r'(?<!\d)2024(?!\d)', '2026', value)
-        normalized = re.sub(r'(?<!\d)2025(?!\d)', '2026', normalized)
+        target = str(YEAR_FIX_TARGET)
+        normalized = re.sub(rf'(?<!\d){YEAR_FIX_TARGET - 2}(?!\d)', target, value)
+        normalized = re.sub(rf'(?<!\d){YEAR_FIX_TARGET - 1}(?!\d)', target, normalized)
         return normalized
 
     def _parse_datetime(self, value: str) -> Optional[datetime]:
