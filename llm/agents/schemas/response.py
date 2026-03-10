@@ -99,7 +99,7 @@ class PolicyResult:
         *,
         today: date | None = None,
     ) -> "PolicyResult":
-        deadline = _normalize_iso_date(data.get("deadline"))
+        deadline = _normalize_iso_date(_get_first(data, "deadline", "aply_end_dt"))
         dday = data.get("dday")
         if dday is None:
             dday = _calculate_dday(deadline, today=today)
@@ -112,12 +112,12 @@ class PolicyResult:
             plcy_no=str(_get_first(data, "plcy_no", "policy_id") or ""),
             plcy_nm=str(_get_first(data, "plcy_nm", "title") or ""),
             category=str(_get_first(data, "category", "category_name") or ""),
-            summary=_collapse_summary(data.get("summary")),
+            summary=_collapse_summary(data.get("summary"), data.get("plcy_expln_cn")),
             eligibility=_coerce_eligibility(data.get("eligibility")),
             ineligible_reasons=[str(reason) for reason in reasons],
             deadline=deadline,
             dday=dday,
-            apply_url=_normalize_optional_text(data.get("apply_url")),
+            apply_url=_normalize_optional_text(_get_first(data, "apply_url", "aply_url_addr")),
             detail_url=_normalize_optional_text(data.get("detail_url")),
         )
 

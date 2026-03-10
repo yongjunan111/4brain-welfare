@@ -222,7 +222,10 @@ def _parse_chat_response(raw_text: str) -> tuple[ChatResponse, bool]:
         except json.JSONDecodeError:
             continue
         if isinstance(parsed, dict):
-            return ChatResponse.from_dict(parsed), True
+            try:
+                return ChatResponse.from_dict(parsed), True
+            except (ValueError, TypeError):
+                continue
 
     return ChatResponse(message=raw_text, policies=[], follow_up=None), False
 
