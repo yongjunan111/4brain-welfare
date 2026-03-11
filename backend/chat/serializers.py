@@ -92,3 +92,4 @@ class SendMessageSerializer(serializers.Serializer):
     POST /api/v1/chat/sessions/{id}/send/ 요청 바디 검증
     """
     content = serializers.CharField(max_length=500, help_text='메시지 내용 (최대 500자)')
+    include_profile = serializers.BooleanField(default=False, required=False, help_text='True면 사용자 프로필 정보를 LLM에 주입')

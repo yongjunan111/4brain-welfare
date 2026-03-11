@@ -142,6 +142,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
+    {
+        'NAME': 'accounts.validators.ComplexityPasswordValidator',
+    },
 ]
 
 
@@ -209,6 +212,7 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-chat-session-token',
+    'x-reauth-token',
 ]
 
 # CSRF Settings

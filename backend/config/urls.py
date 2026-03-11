@@ -19,7 +19,7 @@ from django.urls import path, include
 from django.http import HttpResponseRedirect, JsonResponse
 from django.conf import settings
 from django.db import connection
-from accounts.views import GoogleLogin, FindUsernameView, PasswordResetConfirmRedirectView, AxesLockedLoginView, CustomPasswordResetView, clean_logout
+from accounts.views import GoogleLogin, FindUsernameView, PasswordResetConfirmRedirectView, AxesLockedLoginView, CustomPasswordResetView, clean_logout, DisabledPasswordChangeView
 
 
 
@@ -42,6 +42,7 @@ urlpatterns = [
     # dj-rest-auth & allauth
     path('api/auth/login/', AxesLockedLoginView.as_view(), name='rest_login'),  # 계정 잠금 체크 포함
     path('api/auth/logout/', clean_logout, name='rest_logout'),   # [보안] 쿠키 완전 삭제 (순수 Django 함수형 뷰)
+    path('api/auth/password/change/', DisabledPasswordChangeView.as_view(), name='rest_password_change_disabled'),
     path('api/auth/password/reset/', CustomPasswordResetView.as_view(), name='rest_password_reset'), # [커스텀] 이메일 존재 여부 확인
     path('api/auth/', include('dj_rest_auth.urls')),  # 위에서 login/logout/password/reset 오버라이드 후 나머지
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),

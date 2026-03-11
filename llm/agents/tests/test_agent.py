@@ -80,8 +80,8 @@ class TestAgentCreation:
             captured["policy_fetcher"] = policy_fetcher
             return []
 
-        def fake_chat_openai(*, model, temperature):
-            return {"model": model, "temperature": temperature}
+        def fake_chat_openai(*, model, temperature, timeout=None):
+            return {"model": model, "temperature": temperature, "timeout": timeout}
 
         class DummyAgent:
             pass
@@ -163,8 +163,9 @@ class TestAgentCreation:
             captured["policy_fetcher"] = policy_fetcher
             return [DummyTool("extract_info"), DummyTool("search_policies"), DummyTool("check_eligibility")]
 
-        def fake_chat_openai(*, model, temperature):
+        def fake_chat_openai(*, model, temperature, timeout=None):
             captured["temperature"] = temperature
+            captured["timeout"] = timeout
             return object()
 
         class DummyAgent:

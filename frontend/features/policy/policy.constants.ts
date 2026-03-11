@@ -34,5 +34,15 @@ export const CATEGORY_LABELS: Record<PolicyCategory, string> = {
  * 카테고리 라벨 조회 (fallback 포함)
  */
 export function getCategoryLabel(category: PolicyCategory | string): string {
-    return CATEGORY_LABELS[category as PolicyCategory] ?? "카테고리";
+    if (!category) return "기타";
+    // 1. 이미 올바른 영문 키인 경우 (예: "job")
+    if (CATEGORY_LABELS[category as PolicyCategory]) {
+        return CATEGORY_LABELS[category as PolicyCategory];
+    }
+    // 2. 한글 카테고리 명이 직접 들어온 경우 (예: "일자리", "복지문화")
+    if (category in CATEGORY_NAME_MAP) {
+        return CATEGORY_LABELS[CATEGORY_NAME_MAP[category]];
+    }
+    // 3. 그 외의 경우 원본 텍스트 노출 (혹은 콤마 포함된 경우)
+    return category;
 }

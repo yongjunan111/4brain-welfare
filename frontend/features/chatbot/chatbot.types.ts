@@ -15,6 +15,7 @@ export interface ChatSessionResponse {
   expiresAt: number;
   messages: ChatMessage[];
   sessionToken?: string;
+  hasProfileData?: boolean;
 }
 
 export interface SendMessageResponse {
