@@ -68,12 +68,10 @@ def langfuse_session(session_id: str | None = None):
         return
 
     try:
-        from langfuse import get_client, propagate_attributes
+        from langfuse import propagate_attributes
 
-        langfuse = get_client()
-        with langfuse.start_as_current_observation(as_type="span", name="agent-run"):
-            with propagate_attributes(session_id=session_id):
-                yield
+        with propagate_attributes(session_id=session_id):
+            yield
     except Exception:
         logger.warning("LangFuse session 설정 실패 — session 없이 진행", exc_info=True)
         yield
