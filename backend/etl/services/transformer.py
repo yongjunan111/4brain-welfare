@@ -22,10 +22,6 @@ from policies.services.matching_keys import (
 
 logger = logging.getLogger(__name__)
 
-# 연도 보정 대상: 올해 기준으로 2년 전/1년 전 → 올해로 보정
-YEAR_FIX_TARGET = date.today().year
-
-
 def _safe_replace_year(d: date, target_year: int) -> date:
     """연도 교체 (Feb 29 → Feb 28 fallback for non-leap target years)"""
     try:
@@ -318,16 +314,17 @@ class PolicyTransformer:
         """
         날짜 정제 + 연도 보정 (동적)
 
-        YEAR_FIX_TARGET-2, YEAR_FIX_TARGET-1 연도를 YEAR_FIX_TARGET으로 보정.
+        올해 기준 2년 전/1년 전 연도를 올해로 보정.
         윤년 Feb 29 → Feb 28 fallback 포함.
         """
         if not value or len(value) != 8:
             return None
 
         try:
+            target_year = date.today().year
             parsed = datetime.strptime(value, '%Y%m%d').date()
-            if parsed.year in {YEAR_FIX_TARGET - 2, YEAR_FIX_TARGET - 1}:
-                parsed = _safe_replace_year(parsed, YEAR_FIX_TARGET)
+            if parsed.year in {target_year - 2, target_year - 1}:
+                parsed = _safe_replace_year(parsed, target_year)
             return parsed
         except ValueError:
             return None
@@ -364,14 +361,15 @@ class PolicyTransformer:
     def _normalize_text_years(self, value: str) -> str:
         """
         텍스트에 포함된 연도 표기를 운영 연도 기준으로 동적 보정.
-        YEAR_FIX_TARGET-2, YEAR_FIX_TARGET-1 → YEAR_FIX_TARGET
+        올해 기준 2년 전/1년 전 → 올해로 치환.
         """
         if not value:
             return ''
 
-        target = str(YEAR_FIX_TARGET)
-        normalized = re.sub(rf'(?<!\d){YEAR_FIX_TARGET - 2}(?!\d)', target, value)
-        normalized = re.sub(rf'(?<!\d){YEAR_FIX_TARGET - 1}(?!\d)', target, normalized)
+        target_year = date.today().year
+        target = str(target_year)
+        normalized = re.sub(rf'(?<!\d){target_year - 2}(?!\d)', target, value)
+        normalized = re.sub(rf'(?<!\d){target_year - 1}(?!\d)', target, normalized)
         return normalized
 
     def _parse_datetime(self, value: str) -> Optional[datetime]:
