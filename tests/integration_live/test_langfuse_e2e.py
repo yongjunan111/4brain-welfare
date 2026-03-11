@@ -23,7 +23,6 @@ import os
 import sys
 import time
 import pytest
-from unittest.mock import patch
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -95,10 +94,12 @@ def _fetch_policies(policy_ids: list[str] | None) -> list[dict]:
 # 헬퍼
 # ============================================================================
 
-def _flush_langfuse(handler) -> None:
-    client = getattr(handler, "_langfuse_client", None)
-    if client and hasattr(client, "flush"):
-        client.flush()
+def _flush_langfuse() -> None:
+    try:
+        from langfuse import get_client
+        get_client().flush()
+    except Exception:
+        pass
 
 
 # ============================================================================
@@ -118,22 +119,18 @@ def test_e2e_simple_eligibility_check():
     """
     session_id = "e2e-simple-001"
 
-    from langfuse.langchain import CallbackHandler
-    handler = CallbackHandler()
-
     from llm.agents.agent import create_agent, run_agent
 
     t0 = time.time()
-    with patch("llm.agents.agent.get_langfuse_handler", return_value=handler):
-        agent = create_agent(use_short_prompt=True, policy_fetcher=_fetch_policies, max_iterations=10)
-        result = run_agent(
-            agent,
-            "저 25살이고 강남구에 살아요. 취업 준비 중인데 지원받을 수 있는 거 있을까요?",
-            thread_id=session_id,
-        )
+    agent = create_agent(use_short_prompt=True, policy_fetcher=_fetch_policies, max_iterations=10)
+    result = run_agent(
+        agent,
+        "저 25살이고 강남구에 살아요. 취업 준비 중인데 지원받을 수 있는 거 있을까요?",
+        thread_id=session_id,
+    )
     elapsed = time.time() - t0
 
-    _flush_langfuse(handler)
+    _flush_langfuse()
 
     assert result["error"] is None
     assert result["response"].message.strip() != ""
@@ -157,22 +154,18 @@ def test_e2e_housing_support():
     """
     session_id = "e2e-housing-002"
 
-    from langfuse.langchain import CallbackHandler
-    handler = CallbackHandler()
-
     from llm.agents.agent import create_agent, run_agent
 
     t0 = time.time()
-    with patch("llm.agents.agent.get_langfuse_handler", return_value=handler):
-        agent = create_agent(use_short_prompt=True, policy_fetcher=_fetch_policies, max_iterations=10)
-        result = run_agent(
-            agent,
-            "월세 좀 도와주는 거 없나? 나 27살이고 관악구 살아",
-            thread_id=session_id,
-        )
+    agent = create_agent(use_short_prompt=True, policy_fetcher=_fetch_policies, max_iterations=10)
+    result = run_agent(
+        agent,
+        "월세 좀 도와주는 거 없나? 나 27살이고 관악구 살아",
+        thread_id=session_id,
+    )
     elapsed = time.time() - t0
 
-    _flush_langfuse(handler)
+    _flush_langfuse()
 
     assert result["error"] is None
     assert result["response"].message.strip() != ""
@@ -197,22 +190,18 @@ def test_e2e_complex_multi_need():
     """
     session_id = "e2e-multi-003"
 
-    from langfuse.langchain import CallbackHandler
-    handler = CallbackHandler()
-
     from llm.agents.agent import create_agent, run_agent
 
     t0 = time.time()
-    with patch("llm.agents.agent.get_langfuse_handler", return_value=handler):
-        agent = create_agent(use_short_prompt=True, policy_fetcher=_fetch_policies, max_iterations=10)
-        result = run_agent(
-            agent,
-            "28살 마포구 사는데 알바하면서 월 150만원 벌어요. 주거 지원이랑 취업 지원 둘 다 알려주세요",
-            thread_id=session_id,
-        )
+    agent = create_agent(use_short_prompt=True, policy_fetcher=_fetch_policies, max_iterations=10)
+    result = run_agent(
+        agent,
+        "28살 마포구 사는데 알바하면서 월 150만원 벌어요. 주거 지원이랑 취업 지원 둘 다 알려주세요",
+        thread_id=session_id,
+    )
     elapsed = time.time() - t0
 
-    _flush_langfuse(handler)
+    _flush_langfuse()
 
     assert result["error"] is None
     assert result["response"].message.strip() != ""

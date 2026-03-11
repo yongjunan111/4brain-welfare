@@ -96,11 +96,13 @@ def _make_mock_backend(search_result: dict):
     return backend
 
 
-def _flush_langfuse(handler):
+def _flush_langfuse() -> None:
     """LangFuse 대기 중인 이벤트 즉시 전송."""
-    client = getattr(handler, "_langfuse_client", None)
-    if client and hasattr(client, "flush"):
-        client.flush()
+    try:
+        from langfuse import get_client
+        get_client().flush()
+    except Exception:
+        pass
 
 
 # ============================================================================
@@ -120,16 +122,11 @@ def test_trajectory_info_extraction():
     """
     session_id = "trajectory-extract-001"
 
-    from langfuse.langchain import CallbackHandler
-    handler = CallbackHandler()
-
     from llm.agents.agent import create_agent, run_agent
 
     mock_backend = _make_mock_backend(MOCK_EMPTY_RESULT)
 
-    with patch("llm.agents.agent.get_langfuse_handler", return_value=handler), \
-         patch("llm.agents.tools.search_policies.get_search_backend", return_value=mock_backend):
-
+    with patch("llm.agents.tools.search_policies.get_search_backend", return_value=mock_backend):
         agent = create_agent(use_short_prompt=True, policy_fetcher=_mock_policy_fetcher)
         result = run_agent(
             agent,
@@ -137,7 +134,7 @@ def test_trajectory_info_extraction():
             thread_id=session_id,
         )
 
-    _flush_langfuse(handler)
+    _flush_langfuse()
 
     assert result["error"] is None
     print(f"\n✅ 응답: {result['response'].message[:100]}")
@@ -158,16 +155,11 @@ def test_trajectory_search_chain():
     """
     session_id = "trajectory-search-002"
 
-    from langfuse.langchain import CallbackHandler
-    handler = CallbackHandler()
-
     from llm.agents.agent import create_agent, run_agent
 
     mock_backend = _make_mock_backend(MOCK_EMPTY_RESULT)
 
-    with patch("llm.agents.agent.get_langfuse_handler", return_value=handler), \
-         patch("llm.agents.tools.search_policies.get_search_backend", return_value=mock_backend):
-
+    with patch("llm.agents.tools.search_policies.get_search_backend", return_value=mock_backend):
         agent = create_agent(use_short_prompt=True, policy_fetcher=_mock_policy_fetcher)
         result = run_agent(
             agent,
@@ -175,7 +167,7 @@ def test_trajectory_search_chain():
             thread_id=session_id,
         )
 
-    _flush_langfuse(handler)
+    _flush_langfuse()
 
     assert result["error"] is None
     print(f"\n✅ 응답: {result['response'].message[:100]}")
@@ -197,16 +189,11 @@ def test_trajectory_multi_tool_chain():
     """
     session_id = "trajectory-multi-003"
 
-    from langfuse.langchain import CallbackHandler
-    handler = CallbackHandler()
-
     from llm.agents.agent import create_agent, run_agent
 
     mock_backend = _make_mock_backend(MOCK_SEARCH_RESULT)
 
-    with patch("llm.agents.agent.get_langfuse_handler", return_value=handler), \
-         patch("llm.agents.tools.search_policies.get_search_backend", return_value=mock_backend):
-
+    with patch("llm.agents.tools.search_policies.get_search_backend", return_value=mock_backend):
         agent = create_agent(use_short_prompt=True, policy_fetcher=_mock_policy_fetcher)
         result = run_agent(
             agent,
@@ -214,7 +201,7 @@ def test_trajectory_multi_tool_chain():
             thread_id=session_id,
         )
 
-    _flush_langfuse(handler)
+    _flush_langfuse()
 
     assert result["error"] is None
     print(f"\n✅ 응답: {result['response'].message[:150]}")
