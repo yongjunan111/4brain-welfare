@@ -173,7 +173,7 @@ venv.bak/
 .env.production.local
 backend/.env
 frontend/.env.local
-.env.docker
+
 .env.langfuse
 
 # Spyder project settings
@@ -269,6 +269,9 @@ out/
 # Claude Code
 .claude/
 tmpclaude-*
+
+# omc (oh-my-claudecode)
+.omc/
 
 # ETL 로그 및 태스크 파일
 logs/

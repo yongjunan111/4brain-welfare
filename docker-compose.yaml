@@ -1,4 +1,4 @@
-# .env.docker.example → .env.docker 복사 필요
+# 환경변수: .env (base) + .env.docker (Docker override). cp .env.example .env 후 키값 채우기
 services:
   # ---------------------------------------------------------------------------
   # PostgreSQL
@@ -6,7 +6,7 @@ services:
   db:
     image: postgres:15
     container_name: welfare_db
-    env_file: [.env.docker]
+    env_file: [.env, .env.docker]
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -27,13 +27,15 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     container_name: welfare_backend
-    env_file: [.env.docker]
+    env_file: [.env, .env.docker]
     ports:
       - "8000:8000"
     working_dir: /app/backend
     volumes:
       - ./backend:/app/backend
+      - ./llm:/app/llm
       - ./data/raw:/app/data/raw
+      - ./data/chroma_db:/app/data/chroma_db
       - backend_static:/app/backend/staticfiles
     depends_on:
       db:
@@ -56,7 +58,7 @@ services:
       context: .
       dockerfile: llm/Dockerfile
     container_name: welfare_mcp
-    env_file: [.env.docker]
+    env_file: [.env, .env.docker]
     ports:
       - "8001:8001"
     depends_on:
@@ -82,7 +84,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: welfare_frontend
-    env_file: [.env.docker]
+    env_file: [.env, .env.docker]
     environment:
       PORT: 3001
     ports:
