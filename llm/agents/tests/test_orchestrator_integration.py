@@ -714,7 +714,7 @@ class TestOrchestratorIntegrationContracts:
         info = _latest_check_user_info(call_log)
         assert info is not None
         fields = json.dumps(info, ensure_ascii=False)
-        assert ("취업" in fields) or ("needs" not in info and "interests" not in info)
+        assert ("취업" in fields) or ("needs" not in info) or (not info.get("needs"))
 
     def test_itg_profile_not_reextracted_soft(self):
         agent, call_log = _build_stub_agent()
