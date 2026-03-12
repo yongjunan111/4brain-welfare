@@ -266,9 +266,9 @@ def run_agent(
         "configurable": {"thread_id": thread_id},
         "recursion_limit": recursion_limit,
     }
-    langfuse_handler = get_langfuse_handler(session_id=thread_id)
+    langfuse_handler = get_langfuse_handler()
     if langfuse_handler is not None:
-        config["callbacks"] = [langfuse_handler]
+        config.setdefault("callbacks", []).append(langfuse_handler)
 
     # 입력 메시지
     inputs = {"messages": [HumanMessage(content=message)]}
@@ -344,19 +344,24 @@ def stream_agent(
     Yields:
         각 스텝의 결과 dict
     """
-    config = {"configurable": {"thread_id": thread_id}}
-    langfuse_handler = get_langfuse_handler(session_id=thread_id)
+    max_iterations = getattr(agent, "_max_iterations", 5)
+    recursion_limit = max_iterations * 2 + 1
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": recursion_limit,
+    }
+    langfuse_handler = get_langfuse_handler()
     if langfuse_handler is not None:
-        config["callbacks"] = [langfuse_handler]
+        config.setdefault("callbacks", []).append(langfuse_handler)
     inputs = {"messages": [HumanMessage(content=message)]}
 
-    try:
-        with langfuse_session(session_id=thread_id):
+    with langfuse_session(session_id=thread_id):
+        try:
             for chunk in agent.stream(inputs, config=config, stream_mode="values"):
                 yield chunk
-    except Exception as e:
-        logger.exception("스트리밍 중 오류 발생")
-        yield {"error": f"스트리밍 중 오류: {str(e)}"}
+        except Exception as e:
+            logger.exception("스트리밍 중 오류 발생")
+            yield {"error": f"스트리밍 중 오류: {str(e)}"}
 
 
 # ============================================================================
