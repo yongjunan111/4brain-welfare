@@ -58,9 +58,9 @@ def test_handler_created_when_env_present(monkeypatch):
         import llm.services.langfuse_client as module
         reload(module)
 
-        result = module.get_langfuse_handler(session_id="sess-1", user_id="user-1")
+        result = module.get_langfuse_handler()
 
-    # v4: secret_key/session_id/user_id/host는 환경변수에서 자동으로 읽힘
+    # v4: session_id/user_id는 langfuse_session()으로 전파, CallbackHandler()는 인자 없이 호출
     mock_callback_cls.assert_called_once_with()
     assert result is mock_handler
 
@@ -102,7 +102,7 @@ def test_run_agent_includes_langfuse_callback(monkeypatch):
         from llm.agents.agent import run_agent
         run_agent(mock_agent, "테스트 메시지", thread_id="thread-42")
 
-    mock_get.assert_called_once_with(session_id="thread-42")
+    mock_get.assert_called_once_with()
     call_config = mock_agent.invoke.call_args[1]["config"]
     assert mock_handler in call_config["callbacks"]
 
@@ -158,7 +158,7 @@ def test_stream_agent_includes_langfuse_callback():
         from llm.agents.agent import stream_agent
         list(stream_agent(mock_agent, "테스트", thread_id="stream-thread-1"))
 
-    mock_get.assert_called_once_with(session_id="stream-thread-1")
+    mock_get.assert_called_once_with()
     call_config = mock_agent.stream.call_args[1]["config"]
     assert mock_handler in call_config["callbacks"]
 
