@@ -530,16 +530,27 @@ class TestRankPolicies:
 
         assert [row["policy_id"] for row in ranked] == ["FREE", "CULTURE"]
 
-    def test_employment_status_changup_dead_branch_removed(self):
-        """'창업' key는 extract_info에서 나오지 않는 값이라 테이블에서 제거됐고,
-        '창업준비'가 그 역할을 대신한다."""
-        from llm.agents.tools.check_eligibility import _rank_eligible_policies
-        import inspect
+    def test_employment_status_changup_does_not_get_bonus(self):
+        """'창업'은 extract_info canonical value가 아니라 가중치가 적용되지 않는다.
+        '창업준비'가 canonical value이며 창업 관련 정책에 가중치를 받는다."""
+        ranked_changup = _rank(
+            [
+                _eligible_row(policy_id="CULTURE", title="문화 지원 정책"),
+                _eligible_row(policy_id="BIZ", title="창업 사업 지원 정책"),
+            ],
+            {"employment_status": "창업"},  # non-canonical value
+        )
+        ranked_changup_junbi = _rank(
+            [
+                _eligible_row(policy_id="CULTURE", title="문화 지원 정책"),
+                _eligible_row(policy_id="BIZ", title="창업 사업 지원 정책"),
+            ],
+            {"employment_status": "창업준비"},  # canonical value
+        )
 
-        source = inspect.getsource(_rank_eligible_policies)
-        assert '"창업준비"' in source, "창업준비 canonical key가 존재해야 합니다"
-        assert '"자영업"' in source, "자영업 canonical key가 존재해야 합니다"
-        assert '"프리랜서"' in source, "프리랜서 canonical key가 존재해야 합니다"
+        # 창업(non-canonical)은 가중치 없어 순서 유지, 창업준비(canonical)는 BIZ가 앞으로
+        assert ranked_changup[0]["policy_id"] == "CULTURE"
+        assert ranked_changup_junbi[0]["policy_id"] == "BIZ"
 
     def test_monthly_rent_housing_bonus_applied(self):
         ranked = _rank(

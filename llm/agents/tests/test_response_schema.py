@@ -292,27 +292,26 @@ class TestBuildChatResponseOrderSafety:
         assert response.policies[1].plcy_no == "B"
         assert response.policies[1].eligibility.value == "ineligible"
 
-    def test_order_mismatch_causes_wrong_mapping(self):
-        """policies와 eligibility_results 순서가 어긋나면 매핑이 뒤바뀐다.
-        check_eligibility가 적격 정책을 재정렬한 뒤 이 함수를 호출할 경우
-        반드시 두 리스트의 순서를 동기화해야 함을 보여준다.
-        TODO: 향후 policy_id 기준 매핑으로 리팩토링하면 이 위험이 제거된다."""
+    def test_caller_must_keep_policies_and_results_in_sync(self):
+        """check_eligibility가 적격 정책을 재정렬할 경우, 이 함수를 호출하는 쪽에서
+        policies와 eligibility_results의 순서를 동기화해야 한다.
+        현재 zip 기반 구현은 순서가 어긋나면 잘못된 매핑을 만든다.
+        TODO: policy_id 기준 매핑으로 리팩토링하면 이 순서 의존성이 제거된다."""
+        # 순서가 일치하는 경우만 정상 동작을 보장한다
         response = build_chat_response(
-            message="순서 뒤바뀐 결과.",
+            message="순서 동기화된 결과.",
             policies=[
                 {"policy_id": "A", "title": "정책A"},
                 {"policy_id": "B", "title": "정책B"},
             ],
             eligibility_results=[
-                # 의도적으로 B의 결과를 A 위치에, A의 결과를 B 위치에 넣음
-                {"is_eligible": False, "reasons": ["나이 미충족"]},
                 {"is_eligible": True, "reasons": []},
+                {"is_eligible": False, "reasons": ["나이 미충족"]},
             ],
             today=date(2026, 3, 8),
         )
 
-        # A에 B의 자격판정 결과가 붙어버린다 — 순서 의존성의 위험을 명시적으로 확인
         assert response.policies[0].plcy_no == "A"
-        assert response.policies[0].eligibility.value == "ineligible"  # 실제로는 A가 eligible이어야 함
+        assert response.policies[0].eligibility.value == "eligible"
         assert response.policies[1].plcy_no == "B"
-        assert response.policies[1].eligibility.value == "eligible"  # 실제로는 B가 ineligible이어야 함
+        assert response.policies[1].eligibility.value == "ineligible"
