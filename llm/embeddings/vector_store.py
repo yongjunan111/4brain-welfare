@@ -17,7 +17,11 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '../../.env'))
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 
-from embeddings.policy_utils import create_policy_text, extract_metadata  # noqa: F401
+try:
+    from llm.embeddings.policy_utils import create_policy_text, extract_metadata  # noqa: F401
+except ModuleNotFoundError:
+    # `PYTHONPATH=/app/llm`처럼 embeddings top-level로 실행하는 경로 호환
+    from embeddings.policy_utils import create_policy_text, extract_metadata  # noqa: F401
 
 # ============================================================================
 # 경로 설정
@@ -90,13 +94,21 @@ def create_vector_db(force_recreate: bool = False) -> Chroma:
     
     # 이미 존재하면 스킵 (force_recreate=False일 때)
     if os.path.exists(DB_PATH) and not force_recreate:
-        print(f"✅ 벡터 DB 이미 존재: {DB_PATH}")
-        print(f"   재생성하려면 force_recreate=True로 호출하세요")
-        return load_vector_db()
+        stats = get_db_stats_lightweight()
+        if sum(stats.get("collections", {}).values()) > 0:
+            print(f"✅ 벡터 DB 이미 존재: {DB_PATH}")
+            print(f"   재생성하려면 force_recreate=True로 호출하세요")
+            return load_vector_db()
+        print("⚠️  벡터 DB 디렉토리는 있지만 비어있음 — 새로 생성합니다")
     
-    # 재생성 시 기존 DB 삭제
+    # 재생성 시 기존 DB 삭제 (볼륨 마운트 포인트 보존 위해 내용물만 삭제)
     if force_recreate and os.path.exists(DB_PATH):
-        shutil.rmtree(DB_PATH)
+        for item in os.listdir(DB_PATH):
+            item_path = os.path.join(DB_PATH, item)
+            if os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+            else:
+                os.remove(item_path)
         print(f"🗑️  기존 벡터 DB 삭제: {DB_PATH}")
     
     # 임베딩 모델 초기화
