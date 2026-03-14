@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { LoginForm } from "@/features/auth/LoginForm";
 import { HeroBanner } from "@/features/home/HeroBanner";
 import { ChatMessageBubble } from "@/features/chatbot/ChatMessage";
 import { ThinkingIndicator } from "@/features/chatbot/ThinkingIndicator";
 import { JOB_STATUS_LABELS, HOUSING_TYPE_LABELS } from "@/features/chatbot/chatbot.labels";
+import { clearLocalAvatarUrl, saveLocalAvatarUrl } from "@/features/mypage/mypage.api";
 import { useAuthStore } from "@/stores/auth.store";
 import { useChatbotStore } from "@/stores/chatbot.store";
 import { useProfileStore } from "@/stores/profile.store";
@@ -18,6 +19,7 @@ export function HomeLoginChatSection() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const profile = useProfileStore((s) => s.profile);
   const fetchProfile = useProfileStore((s) => s.fetchProfile);
+  const updateProfile = useProfileStore((s) => s.updateProfile);
   const isLoading = useChatbotStore((s) => s.isLoading);
   const sessionId = useChatbotStore((s) => s.sessionId);
   const messages = useChatbotStore((s) => s.messages);
@@ -30,6 +32,7 @@ export function HomeLoginChatSection() {
   const setProfileInjected = useChatbotStore((s) => s.setProfileInjected);
   const [text, setText] = useState("");
   const [showProfileInfo, setShowProfileInfo] = useState(true);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (isAuthenticated && !profile) {
@@ -73,6 +76,36 @@ export function HomeLoginChatSection() {
     await sendMessage(trimmed);
   };
 
+  const handleClickAvatarUpload = () => {
+    avatarInputRef.current?.click();
+  };
+
+  const handleAvatarSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !profile) return;
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 5 * 1024 * 1024) {
+      window.alert("프로필 사진은 5MB 이하 이미지만 업로드할 수 있습니다.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const avatarUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!avatarUrl) return;
+      saveLocalAvatarUrl(avatarUrl);
+      await updateProfile({ ...profile, avatarUrl });
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const handleAvatarRemove = async () => {
+    if (!profile) return;
+    clearLocalAvatarUrl();
+    await updateProfile({ ...profile, avatarUrl: undefined });
+  };
+
 
   return (
     <section className="grid grid-cols-1 gap-5 lg:grid-cols-[380px_1fr]">
@@ -83,7 +116,7 @@ export function HomeLoginChatSection() {
             <div className="flex h-full flex-col p-5">
               {showProfileInfo ? (
                 <>
-                    <h2 className="mt-1 mb-2 text-[18px] font-bold leading-none text-gray-900 px-2">정책 매칭 정보</h2>
+                  <h2 className="mt-1 mb-2 text-[18px] font-bold leading-none text-gray-900 px-2">정책 매칭 정보</h2>
                   <div className="mt-1 mb-2 rounded-xl bg-gray-50 px-4 py-2">
                     <p className="mt-1 text-xs text-gray-600">프로필 기반 추천 정보입니다. 정보가 정확할수록 추천 품질이 좋아집니다.</p>
                   </div>
@@ -119,18 +152,42 @@ export function HomeLoginChatSection() {
                     <h2 className="text-[18px] font-bold leading-none text-gray-900">반갑습니다!</h2>
                   </div>
 
-                  <div className="flex flex-1 flex-col items-center justify-center gap-3 pt-10 pb-15">
-                    <div className="relative h-40 w-40 overflow-hidden rounded-full border-2 border-gray-200">
+                  <div className="flex flex-1 flex-col items-center justify-center gap-2 pt-5 pb-8">
+                    <div className="relative h-50 w-50 overflow-hidden rounded-full border-2 border-gray-200">
                       <Image
-                        src={profile?.avatarUrl || "/logo/welfarecompass.png"}
+                        src={profile?.avatarUrl || "/mascot/profile-default.png"}
                         alt="프로필 사진"
                         fill
                         className="object-cover"
                       />
                     </div>
-                    <p className="text-lg font-semibold text-gray-800">
+                    <p className="text-lg font-semibold text-gray-800 pb-1">
                       {profile?.displayName || "사용자"}님
                     </p>
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarSelected}
+                    />
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleClickAvatarUpload}
+                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Upload
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAvatarRemove}
+                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-4 grid grid-cols-3 gap-2">

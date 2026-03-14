@@ -26,7 +26,7 @@ export function Header() {
       </div>
 
       {/* ✅ 메인 헤더 */}
-      <div className="relative border-b border-gray-200 mb-1 mx-auto flex h-16 max-w-[1280px] items-center justify-between px-4">
+      <div className="relative border-b border-gray-200 mx-auto flex h-16 max-w-[1280px] items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2">
           <Image
             src="/logo/welfarecompass.png"

@@ -195,9 +195,42 @@ export function ProfileEditForm() {
         });
     }
 
+    function buildClearedProfile(current: MyProfile): MyProfile {
+        return {
+            ...current,
+            birthYear: null,
+            district: "",
+            incomeLevel: "",
+            incomeAmount: null,
+            jobStatus: "",
+            educationStatus: "",
+            marriageStatus: "",
+            housingType: "",
+            householdSize: null,
+            hasChildren: false,
+            childrenAges: [],
+            specialConditions: [],
+            needs: [],
+            interestIds: [],
+        };
+    }
+
     async function onReset() {
-        if (!origin) return;
-        setForm(origin);
+        if (!form) return;
+        const confirmed = window.confirm("퍼스널 정보를 초기화하겠습니까?");
+        if (!confirmed) return;
+
+        setSaving(true);
+        try {
+            const cleared = buildClearedProfile(form);
+            await saveProfilePreferences(cleared);
+            const latest = await getMyProfile();
+            setOrigin(latest);
+            setForm(latest);
+            await updateProfile(latest);
+        } finally {
+            setSaving(false);
+        }
     }
 
     async function onSave() {
@@ -227,15 +260,15 @@ export function ProfileEditForm() {
                 <div className="flex items-center gap-4">
                     <div className="grid h-14 w-14 place-items-center rounded-full bg-white/15">
                         <Image
-                            src={form.avatarUrl || "/logo/welfarecompass.png"}
+                            src={form.avatarUrl || "/mascot/profile-default.png"}
                             alt="avatar"
-                            width={40}
-                            height={40}
+                            width={45}
+                            height={45}
                             className="object-contain"
                         />
                     </div>
                     <div>
-                        <div className="text-lg font-bold">{form.displayName}의 퍼스널 정보</div>
+                        <div className="text-lg font-bold">{form.displayName}님의 퍼스널 정보</div>
                         <div className="mt-1 text-sm text-white/80">
                             설정하신 개인정보 및 관심분야를 기반으로 맞춤 정책을 제공합니다.
                         </div>
