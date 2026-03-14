@@ -332,9 +332,9 @@ cp backend/.env.example .env
 그다음 Backend를 실행합니다.
 
 ```bash
-python -m venv .venv
+pip install uv
+uv sync
 source .venv/bin/activate
-pip install -r backend/requirements.txt
 
 cd backend
 python manage.py migrate
