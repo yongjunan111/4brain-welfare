@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponseRedirect # [추가] 리다이렉트를 위한 임포트
 from policies.models import Policy
@@ -310,12 +310,15 @@ class ProfileView(APIView):
         return Response(data)
 
     def put(self, request):
-        self.permission_classes = [IsAuthenticated, IsReauthenticated]
+        self.permission_classes = [IsAuthenticated]
         self.check_permissions(request)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         serializer = ProfileSerializer(profile, data=request.data)
         if serializer.is_valid():
             serializer.save()
+            token = request.headers.get('X-Reauth-Token')
+            if token:
+                blacklist_reauth_token(token)
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -365,7 +368,7 @@ class DeleteAccountView(APIView):
     회원 탈퇴 API
     DELETE /api/accounts/delete/
     """
-    permission_classes = [IsAuthenticated, IsReauthenticated]
+    permission_classes = [IsAuthenticated]
 
     def delete(self, request):
         user = request.user
@@ -387,6 +390,9 @@ class DeleteAccountView(APIView):
         # 비밀번호가 없는 사용자(소셜 로그인)는 VerifySocialView를 통해 발급받은
         # reauth_token이 IsReauthenticated를 통해 검증된 상태임. 바로 탈퇴 진행.
 
+        token = request.headers.get('X-Reauth-Token')
+        if token:
+            blacklist_reauth_token(token)
         user.delete()
         return Response({"message": "회원탈퇴가 완료되었습니다."}, status=status.HTTP_200_OK)
 
@@ -485,6 +491,7 @@ class ChangePasswordView(APIView):
 
         request.user.set_password(new_password1)
         request.user.save()
+        update_session_auth_hash(request, request.user)
 
         # 사용된 reauth 토큰 블랙리스트 등록 (재사용 방지)
         token = request.headers.get('X-Reauth-Token')

@@ -33,6 +33,13 @@ function GoogleLoginButtonContent() {
                 router.push("/");
             } catch (error) {
                 console.error("Google Login Failed:", error);
+                const axiosError = error as any;
+                console.error("Google Login Failed Data JSON:", JSON.stringify(axiosError?.response?.data));
+                console.error("Google Login Failed Detail:", {
+                    status: axiosError?.response?.status,
+                    url: axiosError?.config?.url,
+                    data: axiosError?.response?.data,
+                });
                 alert("구글 로그인에 실패했습니다.");
             }
         },

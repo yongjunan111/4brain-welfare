@@ -11,6 +11,7 @@ interface ChatbotState {
   sessionToken: string | null;
   messages: ChatMessage[];
   hasProfileData: boolean;
+  profileInjected: boolean;
   panelWidth: number;
   panelHeight: number;
   panelX: number | null;
@@ -22,6 +23,7 @@ interface ChatbotState {
   resetConversation: () => Promise<void>;
   ensureSession: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  setProfileInjected: (value: boolean) => void;
   setPanelSize: (width: number, height: number) => void;
   setPanelPosition: (x: number, y: number) => void;
 
@@ -38,6 +40,7 @@ export const useChatbotStore = create<ChatbotState>()(
         sessionToken: null,
         messages: [],
         hasProfileData: false,
+        profileInjected: false,
         panelWidth: 420,
         panelHeight: 620,
         panelX: null,
@@ -57,6 +60,7 @@ export const useChatbotStore = create<ChatbotState>()(
             sessionToken: null,
             messages: [],
             isLoading: false,
+            profileInjected: false,
           });
         },
 
@@ -90,10 +94,13 @@ export const useChatbotStore = create<ChatbotState>()(
             sessionToken: null,
             messages: [],
             hasProfileData: false,
+            profileInjected: false,
             isLoading: false,
           });
           await get().ensureSession();
         },
+
+        setProfileInjected: (value: boolean) => set({ profileInjected: value }),
 
         setPanelSize: (width: number, height: number) => {
           set({ panelWidth: width, panelHeight: height });

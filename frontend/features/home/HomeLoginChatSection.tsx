@@ -26,14 +26,10 @@ export function HomeLoginChatSection() {
   const sendMessage = useChatbotStore((s) => s.sendMessage);
   const open = useChatbotStore((s) => s.open);
   const hasProfileData = useChatbotStore((s) => s.hasProfileData);
+  const profileInjected = useChatbotStore((s) => s.profileInjected);
+  const setProfileInjected = useChatbotStore((s) => s.setProfileInjected);
   const [text, setText] = useState("");
   const [showProfileInfo, setShowProfileInfo] = useState(true);
-  const [profileInjected, setProfileInjected] = useState(false);
-
-  // 세션이 바뀌면(새로고침) profileInjected 리셋
-  useEffect(() => {
-    setProfileInjected(false);
-  }, [sessionId]);
 
   useEffect(() => {
     if (isAuthenticated && !profile) {
@@ -72,9 +68,9 @@ export function HomeLoginChatSection() {
   const handleSend = async (value: string) => {
     const trimmed = value.trim();
     if (!trimmed || isLoading) return;
+    setText("");
     await ensureSession();
     await sendMessage(trimmed);
-    setText("");
   };
 
 
@@ -253,7 +249,6 @@ export function HomeLoginChatSection() {
               value={text}
               onChange={(event) => setText(event.target.value)}
               placeholder="궁금하신 복지 혜택을 물어보세요..."
-              disabled={isLoading}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.nativeEvent.isComposing) {
                   void handleSend(text);

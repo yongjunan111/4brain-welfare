@@ -1,7 +1,7 @@
 // features/chatbot/ChatWindow.tsx
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useChatbotStore } from "@/stores/chatbot.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -17,20 +17,15 @@ const SIDEBAR_BREAKPOINT = 700;
 export function ChatWindow({ panelWidth }: { panelWidth?: number }) {
   const messages = useChatbotStore((s) => s.messages);
   const isLoading = useChatbotStore((s) => s.isLoading);
-  const sessionId = useChatbotStore((s) => s.sessionId);
   const hasProfileData = useChatbotStore((s) => s.hasProfileData);
   const sendMessage = useChatbotStore((s) => s.sendMessage);
   const ensureSession = useChatbotStore((s) => s.ensureSession);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const profile = useProfileStore((s) => s.profile);
   const fetchProfile = useProfileStore((s) => s.fetchProfile);
+  const profileInjected = useChatbotStore((s) => s.profileInjected);
+  const setProfileInjected = useChatbotStore((s) => s.setProfileInjected);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [profileInjected, setProfileInjected] = useState(false);
-
-  // 세션이 바뀌면 profileInjected 리셋
-  useEffect(() => {
-    setProfileInjected(false);
-  }, [sessionId]);
 
   // 로그인 상태일 때만 프로필 불러오기
   useEffect(() => {

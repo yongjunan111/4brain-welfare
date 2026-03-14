@@ -14,10 +14,11 @@ class ChatMessageSerializer(serializers.ModelSerializer):
     """
     id = serializers.SerializerMethodField()
     createdAt = serializers.SerializerMethodField()
+    policies = serializers.SerializerMethodField()
 
     class Meta:
         model = ChatMessage
-        fields = ['id', 'role', 'content', 'createdAt']
+        fields = ['id', 'role', 'content', 'createdAt', 'policies']
 
     def get_id(self, obj):
         """id를 문자열로 변환 (프론트 타입: string)"""
@@ -26,6 +27,10 @@ class ChatMessageSerializer(serializers.ModelSerializer):
     def get_createdAt(self, obj):
         """timestamp를 밀리초로 변환 (프론트 타입: number)"""
         return int(obj.created_at.timestamp() * 1000)
+
+    def get_policies(self, obj):
+        """assistant 메시지의 정책 카드 데이터 (없으면 빈 배열)"""
+        return obj.metadata.get('policies', [])
 
 
 class ChatSessionSerializer(serializers.ModelSerializer):

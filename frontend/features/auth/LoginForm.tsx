@@ -29,6 +29,12 @@ export function LoginForm({ embedded = false }: LoginFormProps) {
       router.push("/");
     } catch (err: any) {
       console.error("Login Error:", err);
+      console.error("Login Error Detail:", {
+        status: err?.response?.status,
+        url: err?.config?.url,
+        data: err?.response?.data,
+      });
+      console.error("Login Error Data JSON:", JSON.stringify(err?.response?.data));
       if (err.response?.status === 401) {
         if (JSON.stringify(err.response?.data).includes("token_not_valid")) {
           setError("인증 정보가 만료되었습니다. 다시 시도해주세요.");

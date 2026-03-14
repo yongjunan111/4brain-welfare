@@ -227,7 +227,7 @@ export function ProfileEditForm() {
                 <div className="flex items-center gap-4">
                     <div className="grid h-14 w-14 place-items-center rounded-full bg-white/15">
                         <Image
-                            src={form.avatarUrl || "/images/beluga.png"}
+                            src={form.avatarUrl || "/logo/welfarecompass.png"}
                             alt="avatar"
                             width={40}
                             height={40}
