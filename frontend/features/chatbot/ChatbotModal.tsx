@@ -14,13 +14,24 @@ type DragState = {
   pointerOffsetY: number;
 };
 
+type ResizeDirection =
+  | "top"
+  | "right"
+  | "bottom"
+  | "left"
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+
 type ResizeState = {
+  direction: ResizeDirection;
   startX: number;
   startY: number;
   startWidth: number;
   startHeight: number;
-  panelLeft: number;
-  panelTop: number;
+  startLeft: number;
+  startTop: number;
 };
 
 export function ChatbotModal() {
@@ -36,7 +47,8 @@ export function ChatbotModal() {
   const panelRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const restoreRectRef = useRef<{ width: number; height: number; x: number; y: number } | null>(null);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -53,6 +65,17 @@ export function ChatbotModal() {
     const handleResize = () => {
       const maxWidth = Math.max(MIN_WIDTH, window.innerWidth - VIEWPORT_GAP * 2);
       const maxHeight = Math.max(MIN_HEIGHT, window.innerHeight - VIEWPORT_GAP * 2);
+
+      if (isMaximized) {
+        if (panelWidth !== maxWidth || panelHeight !== maxHeight) {
+          setPanelSize(maxWidth, maxHeight);
+        }
+        if (panelX !== VIEWPORT_GAP || panelY !== VIEWPORT_GAP) {
+          setPanelPosition(VIEWPORT_GAP, VIEWPORT_GAP);
+        }
+        return;
+      }
+
       const nextWidth = clamp(panelWidth, MIN_WIDTH, maxWidth);
       const nextHeight = clamp(panelHeight, MIN_HEIGHT, maxHeight);
 
@@ -71,7 +94,7 @@ export function ChatbotModal() {
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [clampPosition, panelHeight, panelWidth, panelX, panelY, setPanelPosition, setPanelSize]);
+  }, [clampPosition, isMaximized, panelHeight, panelWidth, panelX, panelY, setPanelPosition, setPanelSize]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -90,18 +113,48 @@ export function ChatbotModal() {
       }
 
       if (resizeRef.current) {
-        const maxWidth = Math.max(MIN_WIDTH, window.innerWidth - resizeRef.current.panelLeft - VIEWPORT_GAP);
-        const maxHeight = Math.max(MIN_HEIGHT, window.innerHeight - resizeRef.current.panelTop - VIEWPORT_GAP);
-        const nextWidth = clamp(
-          resizeRef.current.startWidth + (event.clientX - resizeRef.current.startX),
-          MIN_WIDTH,
-          maxWidth
-        );
-        const nextHeight = clamp(
-          resizeRef.current.startHeight + (event.clientY - resizeRef.current.startY),
-          MIN_HEIGHT,
-          maxHeight
-        );
+        const { direction, startX, startY, startWidth, startHeight, startLeft, startTop } = resizeRef.current;
+        const deltaX = event.clientX - startX;
+        const deltaY = event.clientY - startY;
+
+        let nextLeft = startLeft;
+        let nextTop = startTop;
+        let nextWidth = startWidth;
+        let nextHeight = startHeight;
+        const startRight = startLeft + startWidth;
+        const startBottom = startTop + startHeight;
+
+        if (direction.includes("right")) {
+          const maxWidthFromLeft = Math.max(MIN_WIDTH, window.innerWidth - startLeft - VIEWPORT_GAP);
+          nextWidth = clamp(startWidth + deltaX, MIN_WIDTH, maxWidthFromLeft);
+        }
+
+        if (direction.includes("left")) {
+          const leftLimit = clamp(
+            startLeft + deltaX,
+            VIEWPORT_GAP,
+            startRight - MIN_WIDTH
+          );
+          nextLeft = leftLimit;
+          nextWidth = startRight - leftLimit;
+        }
+
+        if (direction.includes("bottom")) {
+          const maxHeightFromTop = Math.max(MIN_HEIGHT, window.innerHeight - startTop - VIEWPORT_GAP);
+          nextHeight = clamp(startHeight + deltaY, MIN_HEIGHT, maxHeightFromTop);
+        }
+
+        if (direction.includes("top")) {
+          const topLimit = clamp(
+            startTop + deltaY,
+            VIEWPORT_GAP,
+            startBottom - MIN_HEIGHT
+          );
+          nextTop = topLimit;
+          nextHeight = startBottom - topLimit;
+        }
+
+        setPanelPosition(nextLeft, nextTop);
         setPanelSize(nextWidth, nextHeight);
       }
     };
@@ -120,6 +173,7 @@ export function ChatbotModal() {
   }, [clampPosition, setPanelPosition, setPanelSize]);
 
   const handleDragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (isMaximized) return;
     if (event.button !== 0) return;
     const rect = panelRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -131,25 +185,67 @@ export function ChatbotModal() {
     setPanelPosition(rect.left, rect.top);
   };
 
-  const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    const rect = panelRef.current?.getBoundingClientRect();
-    if (!rect) return;
+  const handleResizeStart =
+    (direction: ResizeDirection) => (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (isMaximized) return;
+      if (event.button !== 0) return;
+      const rect = panelRef.current?.getBoundingClientRect();
+      if (!rect) return;
 
-    resizeRef.current = {
-      startX: event.clientX,
-      startY: event.clientY,
-      startWidth: rect.width,
-      startHeight: rect.height,
-      panelLeft: rect.left,
-      panelTop: rect.top,
+      resizeRef.current = {
+        direction,
+        startX: event.clientX,
+        startY: event.clientY,
+        startWidth: rect.width,
+        startHeight: rect.height,
+        startLeft: rect.left,
+        startTop: rect.top,
+      };
+      setPanelPosition(rect.left, rect.top);
     };
-    setPanelPosition(rect.left, rect.top);
-  };
 
   const handleResetConversation = async () => {
+    const confirmed = window.confirm("대화 내용을 초기화할까요?");
+    if (!confirmed) return;
     await resetConversation();
-    setShowResetConfirm(false);
+  };
+
+  const handleToggleMaximize = () => {
+    const panelEl = panelRef.current;
+    const maxWidth = Math.max(MIN_WIDTH, window.innerWidth - VIEWPORT_GAP * 2);
+    const maxHeight = Math.max(MIN_HEIGHT, window.innerHeight - VIEWPORT_GAP * 2);
+
+    if (isMaximized) {
+      const restore = restoreRectRef.current;
+      if (restore) {
+        const nextPosition = clampPosition(restore.x, restore.y, restore.width, restore.height);
+        setPanelSize(restore.width, restore.height);
+        setPanelPosition(nextPosition.x, nextPosition.y);
+      }
+      setIsMaximized(false);
+      return;
+    }
+
+    if (panelEl) {
+      const rect = panelEl.getBoundingClientRect();
+      restoreRectRef.current = {
+        width: rect.width,
+        height: rect.height,
+        x: rect.left,
+        y: rect.top,
+      };
+    } else {
+      restoreRectRef.current = {
+        width: panelWidth,
+        height: panelHeight,
+        x: panelX ?? window.innerWidth - panelWidth - VIEWPORT_GAP,
+        y: panelY ?? window.innerHeight - panelHeight - VIEWPORT_GAP,
+      };
+    }
+
+    setPanelSize(maxWidth, maxHeight);
+    setPanelPosition(VIEWPORT_GAP, VIEWPORT_GAP);
+    setIsMaximized(true);
   };
 
   return (
@@ -168,46 +264,50 @@ export function ChatbotModal() {
     >
       <div className="flex h-full w-full flex-col overflow-hidden rounded-sm">
         <div
-          className="flex cursor-move items-center justify-between border-b bg-slate-50 px-4 py-3"
+          className={`flex items-center justify-between border-b bg-slate-50 px-4 py-2 ${isMaximized ? "cursor-default" : "cursor-move"}`}
           onPointerDown={handleDragStart}
         >
           <div className="text-sm font-semibold">복지 상담 챗봇</div>
-          <div className="flex items-center gap-2">
-            {showResetConfirm ? (
-              <>
-                <span className="text-xs text-gray-500">초기화할까요?</span>
-                <button
-                  type="button"
-                  onClick={handleResetConversation}
-                  disabled={isLoading}
-                  className="rounded-lg border border-red-300 bg-red-50 px-3 py-1 text-xs text-red-600 hover:bg-red-100 disabled:opacity-50"
-                >
-                  확인
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowResetConfirm(false)}
-                  className="rounded-lg border px-3 py-1 text-xs text-gray-600 hover:bg-gray-100"
-                >
-                  취소
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowResetConfirm(true)}
-                disabled={isLoading}
-                className="rounded-lg border px-3 py-1 text-xs text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                초기화
-              </button>
-            )}
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={handleResetConversation}
+              disabled={isLoading}
+              className="grid h-8 w-8 place-items-center text-gray-700 hover:text-gray-900 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="대화 초기화"
+              title="대화 초기화"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleMaximize}
+              className="grid h-8 w-8 place-items-center text-gray-700 hover:text-gray-900 cursor-pointer"
+              aria-label={isMaximized ? "창 복원" : "최대화"}
+              title={isMaximized ? "창 복원" : "최대화"}
+            >
+              {isMaximized ? (
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="7" y="7" width="10" height="10" rx="1" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="4" y="4" width="16" height="16" rx="1" />
+                </svg>
+              )}
+            </button>
             <button
               type="button"
               onClick={close}
-              className="rounded-lg border px-3 py-1 text-xs text-gray-700"
+              className="grid h-8 w-8 place-items-center text-gray-700 hover:text-gray-900 cursor-pointer"
+              aria-label="닫기"
+              title="닫기"
             >
-              닫기
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+              </svg>
             </button>
           </div>
         </div>
@@ -216,11 +316,50 @@ export function ChatbotModal() {
           <ChatWindow panelWidth={panelWidth} />
         </div>
 
-        <div
-          aria-label="resize"
-          onPointerDown={handleResizeStart}
-          className="absolute bottom-0 right-0 h-5 w-5 cursor-se-resize rounded-tl-md bg-slate-200/80"
-        />
+        {!isMaximized && (
+          <>
+            <div
+              aria-label="resize-top"
+              onPointerDown={handleResizeStart("top")}
+              className="absolute left-2 right-2 top-0 h-2 cursor-n-resize"
+            />
+            <div
+              aria-label="resize-right"
+              onPointerDown={handleResizeStart("right")}
+              className="absolute bottom-2 right-0 top-2 w-2 cursor-e-resize"
+            />
+            <div
+              aria-label="resize-bottom"
+              onPointerDown={handleResizeStart("bottom")}
+              className="absolute bottom-0 left-2 right-2 h-2 cursor-s-resize"
+            />
+            <div
+              aria-label="resize-left"
+              onPointerDown={handleResizeStart("left")}
+              className="absolute bottom-2 left-0 top-2 w-2 cursor-w-resize"
+            />
+            <div
+              aria-label="resize-top-left"
+              onPointerDown={handleResizeStart("top-left")}
+              className="absolute left-0 top-0 h-3 w-3 cursor-nw-resize"
+            />
+            <div
+              aria-label="resize-top-right"
+              onPointerDown={handleResizeStart("top-right")}
+              className="absolute right-0 top-0 h-3 w-3 cursor-ne-resize"
+            />
+            <div
+              aria-label="resize-bottom-left"
+              onPointerDown={handleResizeStart("bottom-left")}
+              className="absolute bottom-0 left-0 h-3 w-3 cursor-sw-resize"
+            />
+            <div
+              aria-label="resize-bottom-right"
+              onPointerDown={handleResizeStart("bottom-right")}
+              className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize"
+            />
+          </>
+        )}
       </div>
     </div>
   );

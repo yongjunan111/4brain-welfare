@@ -236,7 +236,7 @@ export function CalendarPageClient() {
                     <button
                         type="button"
                         onClick={() => setMonth(startOfMonth(new Date()))}
-                        className="px-4 py-1.5 text-xs font-semibold text-gray-700 bg-white flex items-center justify-center transition-colors"
+                        className="px-3 text-xs font-semibold text-gray-700 bg-white flex items-center justify-center transition-colors cursor-pointer"
                         style={{ height: "36px" }}
                     >
                         today

@@ -30,6 +30,9 @@ interface ChatbotState {
   sendMessage: (content: string, includeProfile?: boolean) => Promise<void>;
 }
 
+const DEFAULT_PANEL_WIDTH = 420;
+const DEFAULT_PANEL_HEIGHT = 620;
+
 export const useChatbotStore = create<ChatbotState>()(
   devtools(
     persist(
@@ -41,13 +44,19 @@ export const useChatbotStore = create<ChatbotState>()(
         messages: [],
         hasProfileData: false,
         profileInjected: false,
-        panelWidth: 420,
-        panelHeight: 620,
+        panelWidth: DEFAULT_PANEL_WIDTH,
+        panelHeight: DEFAULT_PANEL_HEIGHT,
         panelX: null,
         panelY: null,
 
         open: async () => {
-          set({ isOpen: true });
+          set({
+            isOpen: true,
+            panelWidth: DEFAULT_PANEL_WIDTH,
+            panelHeight: DEFAULT_PANEL_HEIGHT,
+            panelX: null,
+            panelY: null,
+          });
           await get().ensureSession();
         },
 
@@ -156,8 +165,6 @@ export const useChatbotStore = create<ChatbotState>()(
           sessionToken: state.sessionToken,
           messages: state.messages,
           hasProfileData: state.hasProfileData,
-          panelWidth: state.panelWidth,
-          panelHeight: state.panelHeight,
         }),
       },
     ),
