@@ -68,6 +68,7 @@ def _fetch_policies_for_agent(policy_ids: list[str] | None) -> list[dict]:
             "description",
             "support_content",
             "apply_url",
+            "detail_url",
             "apply_end_date",
             "age_min",
             "age_max",
@@ -314,7 +315,10 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
             )
 
         assistant_content = result["response"].message
-        metadata = {"tool_calls": result.get("tool_calls", [])}
+        metadata = {
+            "tool_calls": result.get("tool_calls", []),
+            "policies": [p.to_dict() for p in result["response"].policies],
+        }
 
         with transaction.atomic():
             user_message = ChatMessage.objects.create(

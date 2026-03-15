@@ -383,6 +383,19 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
                 ensure_ascii=False,
             )
 
+        # 필수 정보 게이팅: 나이·거주지·소득 중 2개 이상 없으면 매칭 실행 안 함
+        _filled = sum(1 for k in ("age", "district", "income_level") if info.get(k) is not None)
+        if _filled < 2:
+            return json.dumps(
+                {
+                    "error": "사용자 정보 부족",
+                    "message": "나이, 거주지, 소득 중 2개 이상이 필요합니다.",
+                    "policies_checked": 0,
+                    "guide": "나이 → 거주지 → 소득 순으로 추가 질문 후 다시 호출하세요.",
+                },
+                ensure_ascii=False,
+            )
+
         is_all_mode = isinstance(policies, str) and policies.strip() in ("all", "all_policies")
         if is_all_mode:
             try:
@@ -467,12 +480,24 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
             }
             is_eligible, reasons = _judge(details)
 
+            _apply_end_date = policy.get("apply_end_date")
+            if isinstance(_apply_end_date, (date, datetime)):
+                _apply_end_date = _apply_end_date.isoformat()[:10]
+            elif not isinstance(_apply_end_date, str):
+                _apply_end_date = None
+
             result = {
-                "policy_id": policy.get("policy_id", ""),
-                "title": policy.get("title", ""),
+                "policy_id": policy.get("policy_id") or policy.get("plcy_no") or "",
+                "title": policy.get("title") or policy.get("plcy_nm") or "",
                 "is_eligible": is_eligible,
                 "reasons": reasons,
                 "details": details,
+                # 응답 구조화(PolicyResult 조립)에 필요한 추가 필드
+                "apply_url": policy.get("apply_url") or "",
+                "detail_url": policy.get("detail_url") or "",
+                "category": policy.get("category") or policy.get("category_name") or "",
+                "summary": policy.get("support_content") or policy.get("description") or "",
+                "apply_end_date": _apply_end_date,
             }
             if is_eligible is True:
                 result["_ranking_context"] = {
