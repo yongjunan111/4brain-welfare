@@ -6,6 +6,7 @@ import { MOCK_PROFILE, MOCK_VERIFY } from "./mypage.mock";
 import type { MyProfile, VerifyState } from "./mypage.types";
 
 const VERIFY_KEY = "welfarecompass:verify_state";
+const AVATAR_KEY = "welfarecompass:profile_avatar_url";
 
 // =========================================================================
 // 백엔드 Profile API 응답 타입 (snake_case)
@@ -34,6 +35,23 @@ interface BackendProfile {
     created_at: string;
     updated_at: string;
     has_password?: boolean;
+    has_social_account?: boolean;
+    avatar_url?: string | null;
+}
+
+function getStoredAvatarUrl(): string | null {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(AVATAR_KEY);
+}
+
+export function saveLocalAvatarUrl(avatarUrl: string): void {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(AVATAR_KEY, avatarUrl);
+}
+
+export function clearLocalAvatarUrl(): void {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem(AVATAR_KEY);
 }
 
 // =========================================================================
@@ -42,7 +60,7 @@ interface BackendProfile {
 function toFrontendProfile(backend: BackendProfile): MyProfile {
     return {
         displayName: backend.username,
-        avatarUrl: undefined,
+        avatarUrl: backend.avatar_url || getStoredAvatarUrl() || undefined,
         birthYear: backend.birth_year,
         district: backend.district || "",
         incomeLevel: (backend.income_level || "") as MyProfile["incomeLevel"],
@@ -62,13 +80,15 @@ function toFrontendProfile(backend: BackendProfile): MyProfile {
         phone: "",
         email: backend.email || "",
         hasPassword: backend.has_password ?? true,
+        hasSocialAccount: backend.has_social_account ?? false,
     };
 }
 
 // =========================================================================
 // 프론트엔드 → 백엔드 변환
 // =========================================================================
-function toBackendProfile(frontend: MyProfile): Partial<BackendProfile> {
+/** 정책 매칭 관련 비민감 필드 (PATCH용) */
+function toBackendPreferences(frontend: MyProfile): Partial<BackendProfile> {
     return {
         birth_year: frontend.birthYear,
         district: frontend.district,
@@ -84,6 +104,13 @@ function toBackendProfile(frontend: MyProfile): Partial<BackendProfile> {
         special_conditions: frontend.specialConditions,
         needs: frontend.needs,
         interests: frontend.interestIds,
+    };
+}
+
+/** 전체 프로필 필드 (PUT + 재인증 필요) */
+function toBackendProfile(frontend: MyProfile): Partial<BackendProfile> {
+    return {
+        ...toBackendPreferences(frontend),
         email_notification_enabled: frontend.emailNotificationEnabled,
         notification_email: frontend.notificationEmail,
     };
@@ -107,6 +134,12 @@ export async function saveMyProfile(profile: MyProfile, token?: string): Promise
     const backendData = toBackendProfile(profile);
     const headers = token ? { "X-Reauth-Token": token } : {};
     await api.put("/api/accounts/profile/", backendData, { headers });
+}
+
+/** 정책 매칭 정보 저장 (PATCH - 재인증 불필요) */
+export async function saveProfilePreferences(profile: MyProfile): Promise<void> {
+    const backendData = toBackendPreferences(profile);
+    await api.patch("/api/accounts/profile/", backendData);
 }
 
 export async function getVerifyState(): Promise<VerifyState> {

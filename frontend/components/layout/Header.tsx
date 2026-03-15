@@ -26,7 +26,7 @@ export function Header() {
       </div>
 
       {/* ✅ 메인 헤더 */}
-      <div className="border-b border-gray-200 mb-3 mx-auto flex h-16 max-w-[1280px] items-center justify-between px-4">
+      <div className="relative border-b border-gray-200 mx-auto flex h-16 max-w-[1280px] items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2">
           <Image
             src="/logo/welfarecompass.png"
@@ -42,7 +42,7 @@ export function Header() {
           </div>
         </Link>
 
-        <nav className="flex items-center gap-1 md:gap-10 text-[13px] md:text-[15px] font-semibold text-gray-800">
+        <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 md:gap-10 text-[13px] md:text-[15px] font-semibold text-gray-800">
           <Link href="/policy" className="hover:text-gray-900">
             복지찾기
           </Link>
@@ -52,11 +52,6 @@ export function Header() {
           <Link href="/map" className="hover:text-gray-900">
             복지지도
           </Link>
-          {isAuthenticated && (
-            <Link href="/mypage" className="hover:text-gray-900">
-              마이페이지
-            </Link>
-          )}
         </nav>
 
         {/* ✅ 우측: 로그인 / 회원가입 */}

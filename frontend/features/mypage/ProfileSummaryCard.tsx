@@ -48,16 +48,16 @@ export function ProfileSummaryCard() {
                 <div className="rounded-2xl bg-gradient-to-b from-indigo-100 via-purple-100 to-pink-100 p-8">
                     <div className="flex flex-col items-center text-center">
                         <div className="mb-4 grid h-28 w-28 place-items-center rounded-full bg-white/70">
-                            {/* 이미지 없으면 간단 원형 */}
-                            {profile.avatarUrl ? (
-                                <Image src={profile.avatarUrl} alt="avatar" width={70} height={70} />
-                            ) : (
-                                <div className="h-16 w-16 rounded-full bg-gray-200" />
-                            )}
+                            <Image
+                                src={profile.avatarUrl || "/mascot/profile-default.png"}
+                                alt="avatar"
+                                width={90}
+                                height={90}
+                            />
                         </div>
 
                         <div className="text-xl font-bold">
-                            <span className="text-blue-800">{profile.displayName}</span>의 퍼스널 정보
+                            <span className="text-blue-800">{profile.displayName}</span>님의 퍼스널 정보
                         </div>
                         <p className="mt-3 text-sm text-gray-700">
                             설정하신 개인정보 및 관심분야를 기반으로 맞춤 정책을 제공합니다.

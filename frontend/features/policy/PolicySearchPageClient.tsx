@@ -25,6 +25,7 @@ export function PolicySearchPageClient() {
     // URL 파라미터로 초기 상태 설정
     const initialQ = searchParams.get("q") || "";
     const initialCategory = (searchParams.get("category") as PolicyCategory | "all") || "all";
+    const initialApplyStatus = searchParams.get("apply_status") || "";
 
     // 기본 필터
     const [q, setQ] = useState(initialQ);
@@ -43,7 +44,7 @@ export function PolicySearchPageClient() {
         is_for_low_income: false,
         is_for_newlywed: false,
     });
-    const [applyStatus, setApplyStatus] = useState("");
+    const [applyStatus, setApplyStatus] = useState(initialApplyStatus);
 
     // 페이지네이션
     const [page, setPage] = useState(1);
@@ -53,10 +54,26 @@ export function PolicySearchPageClient() {
     const [loading, setLoading] = useState(false);
     const [ordering, setOrdering] = useState(""); // 정렬 기준
 
-    // 필터 패널 토글
-    const [showFilters, setShowFilters] = useState(false);
+    // 뷰 모드
+    const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
-    // 활성 필터 개수 계산
+    // 초기 마운트 시 로컬 스토리지에서 뷰 모드 복원
+    useEffect(() => {
+        const savedMode = localStorage.getItem("policyViewMode");
+        if (savedMode === "grid" || savedMode === "list") {
+            setViewMode(savedMode);
+        }
+    }, []);
+
+    const handleViewModeChange = (mode: "grid" | "list") => {
+        setViewMode(mode);
+        localStorage.setItem("policyViewMode", mode);
+    };
+
+    // 필터 패널 토글 (초기 고급 필터가 있으면 열어둠)
+    const [showFilters, setShowFilters] = useState(!!initialApplyStatus);
+
+    // 활성 필터 개수 산출
     const activeFilterCount = useMemo(() => {
         let count = 0;
         if (subcategory) count++;
@@ -70,6 +87,47 @@ export function PolicySearchPageClient() {
         if (specialConditions.is_for_low_income) count++;
         if (specialConditions.is_for_newlywed) count++;
         return count;
+    }, [subcategory, employmentStatus, educationStatus, marriageStatus, age, applyStatus, specialConditions]);
+
+    // 활성 필터 칩(Chip) 데이터 생성
+    const activeFilterChips = useMemo(() => {
+        const chips: { id: string; label: string; onRemove: () => void }[] = [];
+
+        if (subcategory) {
+            const opt = SUBCATEGORY_OPTIONS.find(o => o.value === subcategory);
+            chips.push({ id: 'subcategory', label: opt?.label || subcategory, onRemove: () => setSubcategory("") });
+        }
+        if (employmentStatus) {
+            const opt = EMPLOYMENT_OPTIONS.find(o => o.value === employmentStatus);
+            chips.push({ id: 'employmentStatus', label: opt?.label || employmentStatus, onRemove: () => setEmploymentStatus("") });
+        }
+        if (educationStatus) {
+            const opt = EDUCATION_OPTIONS.find(o => o.value === educationStatus);
+            chips.push({ id: 'educationStatus', label: opt?.label || educationStatus, onRemove: () => setEducationStatus("") });
+        }
+        if (marriageStatus) {
+            const opt = MARRIAGE_OPTIONS.find(o => o.value === marriageStatus);
+            chips.push({ id: 'marriageStatus', label: opt?.label || marriageStatus, onRemove: () => setMarriageStatus("") });
+        }
+        if (age) {
+            chips.push({ id: 'age', label: `만 ${age}세`, onRemove: () => setAge("") });
+        }
+        if (applyStatus) {
+            const opt = APPLY_STATUS_OPTIONS.find(o => o.value === applyStatus);
+            chips.push({ id: 'applyStatus', label: opt?.label || applyStatus, onRemove: () => setApplyStatus("") });
+        }
+        
+        SPECIAL_CONDITIONS.forEach(({ key, label }) => {
+            if (specialConditions[key as keyof typeof specialConditions]) {
+                chips.push({
+                    id: `special_${key}`,
+                    label,
+                    onRemove: () => setSpecialConditions(prev => ({ ...prev, [key]: false }))
+                });
+            }
+        });
+
+        return chips;
     }, [subcategory, employmentStatus, educationStatus, marriageStatus, age, applyStatus, specialConditions]);
 
     // 필터 초기화
@@ -186,7 +244,7 @@ export function PolicySearchPageClient() {
                 </div>
 
                 {/* ─── 필터 토글 + 페이지 사이즈 + 결과 건수 ──── */}
-                <div className="mt-3 flex items-center justify-between">
+                <div className="mt-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                         <button
                             type="button"
@@ -235,7 +293,29 @@ export function PolicySearchPageClient() {
                         </select>
                     </div>
 
-                    <div className="text-[11px] text-gray-500">{countText}</div>
+                    <div className="flex items-center gap-3">
+                        <div className="text-[11px] text-gray-500 mr-2">{countText}</div>
+
+                        {/* 뷰 모드 토글 */}
+                        <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                            <button
+                                type="button"
+                                className={`px-2 py-1 flex items-center justify-center rounded-md text-xs font-medium transition-colors ${viewMode === "grid" ? "bg-white text-gray-800 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+                                onClick={() => handleViewModeChange("grid")}
+                                title="그리드 보기"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                            </button>
+                            <button
+                                type="button"
+                                className={`px-2 py-1 flex items-center justify-center rounded-md text-xs font-medium transition-colors ${viewMode === "list" ? "bg-white text-gray-800 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+                                onClick={() => handleViewModeChange("list")}
+                                title="리스트 보기"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* ─── 접이식 고급 필터 패널 ────────────────────── */}
@@ -342,15 +422,33 @@ export function PolicySearchPageClient() {
                             </div>
                         </div>
 
-                        {/* 필터 초기화 버튼 */}
-                        <div className="mt-4 flex justify-end border-t border-gray-100 pt-3">
+                        {/* 활성 필터 칩 및 초기화 버튼 */}
+                        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between border-t border-gray-100 pt-3 gap-3">
+                            <div className="flex flex-wrap items-center gap-1.5 flex-1 p-0.5">
+                                {activeFilterChips.map((chip) => (
+                                    <span
+                                        key={chip.id}
+                                        className="flex items-center gap-1 rounded-md bg-blue-50 pl-2 pr-1 py-1 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
+                                    >
+                                        {chip.label}
+                                        <button
+                                            type="button"
+                                            className="ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-blue-500 transition-colors hover:bg-blue-100 hover:text-blue-900 focus:outline-none"
+                                            onClick={chip.onRemove}
+                                            aria-label={`${chip.label} 필터 해제`}
+                                        >
+                                            ✕
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
                             <button
                                 type="button"
-                                className="rounded-lg border border-gray-200 px-4 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 disabled:opacity-40"
+                                className="shrink-0 self-end sm:self-auto rounded-lg border border-gray-200 px-4 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 disabled:opacity-40"
                                 onClick={resetFilters}
                                 disabled={activeFilterCount === 0}
                             >
-                                필터 초기화
+                                전체 필터 초기화
                             </button>
                         </div>
                     </div>
@@ -359,9 +457,9 @@ export function PolicySearchPageClient() {
 
             {/* ─── 카드 리스트 ──────────────────────────────────── */}
             <section className="w-full">
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <div className={viewMode === "grid" ? "grid grid-cols-2 gap-4 md:grid-cols-4" : "flex flex-col gap-4"}>
                     {items.map((p) => (
-                        <PolicyCard key={p.id} policy={p} />
+                        <PolicyCard key={p.id} policy={p} viewMode={viewMode} />
                     ))}
                 </div>
 

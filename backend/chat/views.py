@@ -1,5 +1,7 @@
+import json as _json
 import logging
 import os
+from datetime import date as _date
 from functools import lru_cache
 
 from django.core import signing
@@ -183,13 +185,32 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
             user=request.user if request.user.is_authenticated else None
         )
 
+        # 로그인 + 프로필 데이터 있는 사용자 판별
+        has_profile_data = False
+        if request.user.is_authenticated and hasattr(request.user, "profile"):
+            p = request.user.profile
+            has_profile_data = bool(p.district or p.birth_year or p.job_status)
+
+        if has_profile_data:
+            greeting = (
+                "안녕하세요! 복지 혜택 찾기를 도와드릴게요. "
+                "현재 상황(거주지, 나이, 취업 상태 등)을 말씀해 주시면 맞춤형 정책을 추천해 드릴게요. "
+                "프로필 정보를 반영하면 더 정확한 맞춤 추천이 가능해요."
+            )
+        else:
+            greeting = (
+                "안녕하세요! 복지 혜택 찾기를 도와드릴게요. "
+                "현재 상황(거주지, 나이, 취업 상태 등)을 말씀해 주시면 맞춤형 정책을 추천해 드릴게요."
+            )
+
         ChatMessage.objects.create(
             session=session,
             role="assistant",
-            content="안녕하세요! 복지 혜택 찾기를 도와드릴게요. 현재 상황(거주지, 나이, 취업 상태 등)을 말씀해 주시면 맞춤형 정책을 추천해 드릴게요.",
+            content=greeting,
         )
 
         payload = ChatSessionDetailSerializer(session).data
+        payload["hasProfileData"] = has_profile_data
         if session.user_id is None:
             payload["sessionToken"] = _build_session_token(str(session.id))
 
@@ -232,6 +253,37 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user_content = serializer.validated_data["content"]
+        include_profile = serializer.validated_data.get("include_profile", False)
+
+        # 프로필 정보 주입
+        if include_profile and request.user.is_authenticated and hasattr(request.user, "profile"):
+            profile = request.user.profile
+            parts = []
+            if profile.district:
+                parts.append(f"거주지: {profile.district}")
+            if profile.age:
+                parts.append(f"나이: 만 {profile.age}세")
+            if profile.job_status:
+                parts.append(f"취업상태: {profile.get_job_status_display()}")
+            if profile.housing_type:
+                parts.append(f"주거형태: {profile.get_housing_type_display()}")
+            if profile.income_level:
+                parts.append(f"소득수준: {profile.get_income_level_display()}")
+            if profile.education_status:
+                parts.append(f"학력: {profile.get_education_status_display()}")
+            if profile.marriage_status:
+                parts.append(f"결혼: {profile.get_marriage_status_display()}")
+            if profile.has_children:
+                ages = profile.children_ages or []
+                parts.append(f"자녀: {len(ages)}명 (나이: {', '.join(map(str, ages))})" if ages else "자녀: 있음")
+            if profile.special_conditions:
+                parts.append(f"특수조건: {', '.join(profile.special_conditions)}")
+            if profile.needs:
+                parts.append(f"관심분야: {', '.join(profile.needs)}")
+
+            if parts:
+                profile_context = "[사용자 프로필 정보] " + ", ".join(parts)
+                user_content = f"{profile_context}\n\n{user_content}"
 
         try:
             result = _run_agent_with_timeout_and_retry(
