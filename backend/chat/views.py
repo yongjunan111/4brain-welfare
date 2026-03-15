@@ -140,36 +140,8 @@ def _format_policy_markdown_response(
     policies: list[dict],
     max_items: int = 4,
 ) -> str:
-    """
-    Keep prompt untouched, but enforce final output to max_items policies on backend.
-    If structured policy list exists, build a stable markdown response from top N.
-    """
-    if not policies:
-        return original_text
-
-    top = policies[:max_items]
-    if len(policies) <= max_items:
-        return original_text
-
-    # Keep LLM text as-is as much as possible, only append a compact markdown list.
-    lines: list[str] = []
-    if original_text and original_text.strip():
-        lines.extend([original_text.strip(), ""])
-
-    for idx, policy in enumerate(top, start=1):
-        title = policy.get("plcy_nm") or policy.get("title") or "Untitled policy"
-        category = policy.get("category") or "-"
-        summary = policy.get("summary") or policy.get("description") or "No summary"
-        apply_url = policy.get("apply_url")
-
-        lines.append(f"### 📌 {idx}. {title}")
-        lines.append(f"- Category: {category}")
-        lines.append(f"- Summary: {summary}")
-        if apply_url:
-            lines.append(f"- Apply: [Open link]({apply_url})")
-        lines.append("")
-
-    return "\\n".join(lines)
+    # Keep chatbot text fully controlled by prompt/LLM output.
+    return original_text
 
 
 class ChatSessionViewSet(viewsets.ModelViewSet):
