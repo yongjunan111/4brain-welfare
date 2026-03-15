@@ -1,7 +1,7 @@
 // features/policy/PolicySearchPageClient.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { fetchPolicies } from "./policy.api";
 import { Policy, PolicyCategory } from "./policy.types";
@@ -28,25 +28,33 @@ export function PolicySearchPageClient() {
     const initialQ = searchParams.get("q") || "";
     const initialCategory = (searchParams.get("category") as PolicyCategory | "all") || "all";
     const initialApplyStatus = searchParams.get("apply_status") || "";
+    const initialRegion = searchParams.get("region") || "";
+    const initialSubcategory = searchParams.get("subcategory") || "";
+    const initialEmploymentStatus = searchParams.get("employment_status") || "";
+    const initialEducationStatus = searchParams.get("education_status") || "";
+    const initialMarriageStatus = searchParams.get("marriage_status") || "";
+    const initialAge = searchParams.get("age") || "";
+    const initialOrdering = searchParams.get("ordering") || "";
+    const initialSpecialConditions = {
+        is_for_single_parent: searchParams.get("is_for_single_parent") === "true",
+        is_for_disabled: searchParams.get("is_for_disabled") === "true",
+        is_for_low_income: searchParams.get("is_for_low_income") === "true",
+        is_for_newlywed: searchParams.get("is_for_newlywed") === "true",
+    };
     const initialPage = Math.max(1, Number(searchParams.get("page") || "1"));
 
     // 기본 필터
     const [q, setQ] = useState(initialQ);
     const [category, setCategory] = useState<PolicyCategory | "all">(initialCategory);
-    const [region, setRegion] = useState("");
+    const [region, setRegion] = useState(initialRegion);
 
     // 고급 필터
-    const [subcategory, setSubcategory] = useState("");
-    const [employmentStatus, setEmploymentStatus] = useState("");
-    const [educationStatus, setEducationStatus] = useState("");
-    const [marriageStatus, setMarriageStatus] = useState("");
-    const [age, setAge] = useState<string>("");
-    const [specialConditions, setSpecialConditions] = useState({
-        is_for_single_parent: false,
-        is_for_disabled: false,
-        is_for_low_income: false,
-        is_for_newlywed: false,
-    });
+    const [subcategory, setSubcategory] = useState(initialSubcategory);
+    const [employmentStatus, setEmploymentStatus] = useState(initialEmploymentStatus);
+    const [educationStatus, setEducationStatus] = useState(initialEducationStatus);
+    const [marriageStatus, setMarriageStatus] = useState(initialMarriageStatus);
+    const [age, setAge] = useState<string>(initialAge);
+    const [specialConditions, setSpecialConditions] = useState(initialSpecialConditions);
     const [applyStatus, setApplyStatus] = useState(initialApplyStatus);
 
     // 페이지네이션
@@ -55,7 +63,8 @@ export function PolicySearchPageClient() {
     const [items, setItems] = useState<Policy[]>([]);
     const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [ordering, setOrdering] = useState(""); // 정렬 기준
+    const [ordering, setOrdering] = useState(initialOrdering);
+    const didInitPageResetRef = useRef(false); // 정렬 기준
 
     // 뷰 모드
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -74,7 +83,20 @@ export function PolicySearchPageClient() {
     };
 
     // 필터 패널 토글 (초기 고급 필터가 있으면 열어둠)
-    const [showFilters, setShowFilters] = useState(!!initialApplyStatus);
+    const [showFilters, setShowFilters] = useState(
+        !!(
+            initialApplyStatus ||
+            initialSubcategory ||
+            initialEmploymentStatus ||
+            initialEducationStatus ||
+            initialMarriageStatus ||
+            initialAge ||
+            initialSpecialConditions.is_for_single_parent ||
+            initialSpecialConditions.is_for_disabled ||
+            initialSpecialConditions.is_for_low_income ||
+            initialSpecialConditions.is_for_newlywed
+        ),
+    );
 
     // 활성 필터 개수 산출
     const activeFilterCount = useMemo(() => {
@@ -151,6 +173,10 @@ export function PolicySearchPageClient() {
 
     // 검색 조건 변경 시 1페이지로 리셋
     useEffect(() => {
+        if (!didInitPageResetRef.current) {
+            didInitPageResetRef.current = true;
+            return;
+        }
         setPage(1);
     }, [q, category, region, pageSize, subcategory, employmentStatus, educationStatus, marriageStatus, age, applyStatus, specialConditions, ordering]);
 
@@ -203,7 +229,18 @@ export function PolicySearchPageClient() {
 
         setOrDelete("q", q.trim());
         setOrDelete("category", category === "all" ? "" : category);
+        setOrDelete("region", region);
+        setOrDelete("subcategory", subcategory);
+        setOrDelete("employment_status", employmentStatus);
+        setOrDelete("education_status", educationStatus);
+        setOrDelete("marriage_status", marriageStatus);
+        setOrDelete("age", age);
         setOrDelete("apply_status", applyStatus);
+        setOrDelete("ordering", ordering);
+        setOrDelete("is_for_single_parent", specialConditions.is_for_single_parent ? "true" : "");
+        setOrDelete("is_for_disabled", specialConditions.is_for_disabled ? "true" : "");
+        setOrDelete("is_for_low_income", specialConditions.is_for_low_income ? "true" : "");
+        setOrDelete("is_for_newlywed", specialConditions.is_for_newlywed ? "true" : "");
         if (page > 1) params.set("page", String(page));
         else params.delete("page");
 
@@ -212,7 +249,22 @@ export function PolicySearchPageClient() {
         if (next !== current) {
             router.replace(next, { scroll: false });
         }
-    }, [router, pathname, q, category, applyStatus, page]);
+    }, [
+        router,
+        pathname,
+        q,
+        category,
+        region,
+        subcategory,
+        employmentStatus,
+        educationStatus,
+        marriageStatus,
+        age,
+        applyStatus,
+        ordering,
+        specialConditions,
+        page,
+    ]);
 
     const countText = useMemo(() => {
         if (loading) return "불러오는 중...";

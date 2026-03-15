@@ -158,13 +158,13 @@ export const useChatbotStore = create<ChatbotState>()(
         },
       }),
       {
-        name: "welfarecompass:chatbot_state",
+        name: "welfarecompass:chatbot_ui_v2",
         storage: createJSONStorage(() => localStorage),
         partialize: (state) => ({
-          sessionId: state.sessionId,
-          sessionToken: state.sessionToken,
-          messages: state.messages,
-          hasProfileData: state.hasProfileData,
+          panelWidth: state.panelWidth,
+          panelHeight: state.panelHeight,
+          panelX: state.panelX,
+          panelY: state.panelY,
         }),
       },
     ),

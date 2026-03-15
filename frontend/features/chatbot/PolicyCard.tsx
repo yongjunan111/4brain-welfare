@@ -1,10 +1,11 @@
 // features/chatbot/PolicyCard.tsx
+import Link from "next/link";
 import type { PolicyCard } from "./chatbot.types";
 
 const ELIGIBILITY_BADGE: Record<string, { label: string; className: string }> = {
-  eligible:   { label: "✅ 신청 가능",  className: "bg-green-50 text-green-700 border-green-200" },
-  ineligible: { label: "❌ 조건 불충족", className: "bg-red-50 text-red-600 border-red-200" },
-  uncertain:  { label: "⚠️ 확인 필요",  className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  eligible: { label: "신청 가능", className: "bg-green-50 text-green-700 border-green-200" },
+  ineligible: { label: "조건 불충족", className: "bg-red-50 text-red-600 border-red-200" },
+  uncertain: { label: "확인 필요", className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
 };
 
 function DdayBadge({ dday }: { dday: number | null }) {
@@ -16,53 +17,50 @@ function DdayBadge({ dday }: { dday: number | null }) {
 
 export function PolicyCardItem({ policy }: { policy: PolicyCard }) {
   const badge = ELIGIBILITY_BADGE[policy.eligibility] ?? ELIGIBILITY_BADGE.uncertain;
-  const url = policy.apply_url || policy.detail_url;
+  const detailHref = policy.plcy_no ? `/policy/${policy.plcy_no}` : null;
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
       <div className="mb-1 flex items-start justify-between gap-2">
-        <p className="text-xs font-semibold text-gray-900 leading-snug flex-1">
+        <p className="flex-1 text-xs font-semibold leading-snug text-gray-900">
           {policy.plcy_nm || "정책명 없음"}
         </p>
         <DdayBadge dday={policy.dday} />
       </div>
 
       {policy.category && (
-          <span className="inline-block mb-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+        <span className="mb-1.5 inline-block rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
           {policy.category}
         </span>
       )}
 
       {policy.summary && (
-        <p className="mb-2 text-[11px] text-gray-600 leading-relaxed line-clamp-2">
-          {policy.summary}
-        </p>
+        <p className="mb-2 line-clamp-2 text-[11px] leading-relaxed text-gray-600">{policy.summary}</p>
       )}
 
       <div className="flex items-center justify-between gap-2">
-        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>
+        <span
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.className}`}
+        >
           {badge.label}
         </span>
 
-        {url ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-md bg-blue-800 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-blue-700 transition"
+        {detailHref ? (
+          <Link
+            href={detailHref}
+            className="rounded-md bg-blue-800 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-blue-700"
           >
-            자세히 보기 →
-          </a>
+            자세히 보기
+          </Link>
         ) : (
-          <span className="text-xs text-gray-400">링크 없음</span>
+          <span className="text-xs text-gray-400">상세 링크 없음</span>
         )}
       </div>
 
       {policy.eligibility === "ineligible" && policy.ineligible_reasons.length > 0 && (
-        <p className="mt-2 text-[11px] text-red-500 leading-relaxed">
-          {policy.ineligible_reasons.join(" · ")}
-        </p>
+        <p className="mt-2 text-[11px] leading-relaxed text-red-500">{policy.ineligible_reasons.join(" · ")}</p>
       )}
     </div>
   );
 }
+

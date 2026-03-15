@@ -87,9 +87,13 @@ export function ChatWindow({ panelWidth }: { panelWidth?: number }) {
                     type="button"
                     disabled={profileInjected || isLoading}
                     onClick={async () => {
-                      await ensureSession();
-                      await sendMessage("내 프로필 정보를 기반으로 맞춤 정책을 추천해주세요.", true);
                       setProfileInjected(true);
+                      try {
+                        await ensureSession();
+                        await sendMessage("내 프로필 정보를 기반으로 맞춤 정책을 추천해주세요.", true);
+                      } catch {
+                        setProfileInjected(false);
+                      }
                     }}
                     className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${profileInjected
                       ? "border border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"

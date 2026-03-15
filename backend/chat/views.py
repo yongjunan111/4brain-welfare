@@ -151,28 +151,25 @@ def _format_policy_markdown_response(
     if len(policies) <= max_items:
         return original_text
 
-    intro = "조건에 맞는 정책을 추려서 안내드릴게요."
-    if original_text:
-        first_line = next((line.strip() for line in original_text.splitlines() if line.strip()), "")
-        if first_line:
-            intro = first_line
+    # Keep LLM text as-is as much as possible, only append a compact markdown list.
+    lines: list[str] = []
+    if original_text and original_text.strip():
+        lines.extend([original_text.strip(), ""])
 
-    lines: list[str] = [intro, "", f"총 **{len(top)}개** 정책입니다.", ""]
     for idx, policy in enumerate(top, start=1):
-        title = policy.get("plcy_nm") or policy.get("title") or "정책명 없음"
+        title = policy.get("plcy_nm") or policy.get("title") or "Untitled policy"
         category = policy.get("category") or "-"
-        summary = policy.get("summary") or policy.get("description") or "상세 설명 없음"
+        summary = policy.get("summary") or policy.get("description") or "No summary"
         apply_url = policy.get("apply_url")
 
-        lines.append(f"### {idx}. {title}")
-        lines.append(f"- 카테고리: {category}")
-        lines.append(f"- 요약: {summary}")
+        lines.append(f"### 📌 {idx}. {title}")
+        lines.append(f"- Category: {category}")
+        lines.append(f"- Summary: {summary}")
         if apply_url:
-            lines.append(f"- 신청 URL: [신청하기]({apply_url})")
+            lines.append(f"- Apply: [Open link]({apply_url})")
         lines.append("")
 
-    lines.append("더 필요하시면 조건을 추가로 알려주세요. 다음 추천도 이어서 도와드릴게요.")
-    return "\n".join(lines)
+    return "\\n".join(lines)
 
 
 class ChatSessionViewSet(viewsets.ModelViewSet):

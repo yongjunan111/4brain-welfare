@@ -65,7 +65,7 @@ export default async function PolicyDetailPage({
 
 
                 {/* 제목 */}
-                <div className="mb-6 pb-3 flex items-start justify-between gap-4 border-b-1 border-gray-500">
+                <div className="mb-5 pb-3 flex items-start justify-between gap-4 border-b-1 border-gray-500">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
                         {policy.title}
                     </h1>
@@ -73,7 +73,7 @@ export default async function PolicyDetailPage({
                 </div>
 
                 {/* ✅ 포스터 이미지 + 요약정보 영역 */}
-                <div className="mb-8 pb-3 flex w-full flex-col md:flex-row gap-8 lg:gap-25 bg-white overflow-hidden border-b-1 border-gray-500">
+                <div className="mb-8 pb-2 flex w-full flex-col md:flex-row gap-8 lg:gap-25 bg-white overflow-hidden border-b-1 border-gray-500">
                     {/* 왼쪽: 포스터 이미지 */}
                     {policy.posterUrl ? (
                         <div className="flex w-full md:w-[320px] ml-15 flex-shrink-0 items-center justify-center bg-gray-50/50 p-6 rounded-xl">
@@ -87,7 +87,7 @@ export default async function PolicyDetailPage({
                             </div>
                         </div>
                     ) : (
-                        <div className="hidden md:flex w-[320px] flex-shrink-0 items-center justify-center bg-gray-100 text-gray-400 text-sm rounded-xl">
+                        <div className="hidden md:flex w-[320px] h-[370px] self-center flex-shrink-0 items-center justify-center bg-gray-100 text-gray-400 text-sm rounded-xl">
                             포스터 이미지 없음
                         </div>
                     )}
@@ -172,7 +172,7 @@ export default async function PolicyDetailPage({
                         </div>
 
                         {/* 신청하기 버튼 (제일 하단) */}
-                        <div className="mt-auto pt-4">
+                        <div className="mt-auto mb-1">
                             {policy.applyUrl && (
                                 <a
                                     href={policy.applyUrl}
