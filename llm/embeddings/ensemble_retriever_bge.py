@@ -80,34 +80,48 @@ class SearchResult:
 
 
 # ============================================================================
-# Dense Retriever
+# Dense Retriever (캐싱)
 # ============================================================================
+_dense_retriever_cache = None
+
+
 def get_dense_retriever(k: int = DEFAULT_RETRIEVE_K):
-    """Chroma DB → LangChain retriever 변환"""
-    db = load_vector_db()
-    return db.as_retriever(
-        search_type="similarity",
-        search_kwargs={"k": k}
-    )
+    """Chroma DB → LangChain retriever 변환 (싱글톤 캐싱)"""
+    global _dense_retriever_cache
+    if _dense_retriever_cache is None:
+        db = load_vector_db()
+        _dense_retriever_cache = db.as_retriever(
+            search_type="similarity",
+            search_kwargs={"k": k}
+        )
+    return _dense_retriever_cache
 
 
 # ============================================================================
-# 앙상블 리트리버
+# 앙상블 리트리버 (캐싱)
 # ============================================================================
+_ensemble_retriever_cache = None
+
+
 def create_ensemble_retriever(
     bm25_weight: float = DEFAULT_BM25_WEIGHT,
     dense_weight: float = DEFAULT_DENSE_WEIGHT,
     k: int = DEFAULT_RETRIEVE_K
 ) -> EnsembleRetriever:
-    """BM25 + Dense 앙상블 리트리버 생성"""
+    """BM25 + Dense 앙상블 리트리버 생성 (싱글톤 캐싱)"""
+    global _ensemble_retriever_cache
+    if _ensemble_retriever_cache is not None:
+        return _ensemble_retriever_cache
+
     total = bm25_weight + dense_weight
     bm25_weight = bm25_weight / total
     dense_weight = dense_weight / total
 
-    return EnsembleRetriever(
+    _ensemble_retriever_cache = EnsembleRetriever(
         retrievers=[get_bm25_retriever(k=k), get_dense_retriever(k=k)],
         weights=[bm25_weight, dense_weight]
     )
+    return _ensemble_retriever_cache
 
 
 # ============================================================================
