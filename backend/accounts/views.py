@@ -368,7 +368,7 @@ class DeleteAccountView(APIView):
     회원 탈퇴 API
     DELETE /api/accounts/delete/
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsReauthenticated]
 
     def delete(self, request):
         user = request.user
