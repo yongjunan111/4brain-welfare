@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { fetchPolicies } from "./policy.api";
 import { Policy, PolicyCategory } from "./policy.types";
 import { PolicyCard } from "./PolicyCard";
@@ -20,7 +20,6 @@ import {
 // ─── 컴포넌트 ──────────────────────────────────────────────────────
 
 export function PolicySearchPageClient() {
-    const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
 
@@ -64,10 +63,26 @@ export function PolicySearchPageClient() {
     const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [ordering, setOrdering] = useState(initialOrdering);
-    const didInitPageResetRef = useRef(false); // 정렬 기준
+    const didInitPageResetRef = useRef(false);
+    const didInitUrlSyncRef = useRef(false);
 
     // 뷰 모드
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
+
+    // ???? ????(popstate)? ??? ? URL page? ??? ??
+    useEffect(() => {
+        const syncPageFromUrl = () => {
+            const url = new URL(window.location.href);
+            const nextPage = Math.max(1, Number(url.searchParams.get("page") || "1"));
+            setPage((prev) => (prev === nextPage ? prev : nextPage));
+        };
+
+        syncPageFromUrl();
+        window.addEventListener("popstate", syncPageFromUrl);
+        return () => window.removeEventListener("popstate", syncPageFromUrl);
+    }, []);
+
 
     // 초기 마운트 시 로컬 스토리지에서 뷰 모드 복원
     useEffect(() => {
@@ -220,6 +235,11 @@ export function PolicySearchPageClient() {
     // URL 쿼리에 현재 검색/페이지 상태 동기화 (뒤로가기 시 복원)
     useEffect(() => {
         if (typeof window === "undefined") return;
+        // 첫 마운트는 건너뜀: 뒤로가기 시 stale state가 URL을 덮어쓰는 것 방지
+        if (!didInitUrlSyncRef.current) {
+            didInitUrlSyncRef.current = true;
+            return;
+        }
         const params = new URLSearchParams(window.location.search);
 
         const setOrDelete = (key: string, value: string) => {
@@ -247,10 +267,9 @@ export function PolicySearchPageClient() {
         const next = `${pathname}${params.toString() ? `?${params.toString()}` : ""}`;
         const current = `${pathname}${window.location.search}`;
         if (next !== current) {
-            router.replace(next, { scroll: false });
+            window.history.replaceState(null, "", next);
         }
     }, [
-        router,
         pathname,
         q,
         category,

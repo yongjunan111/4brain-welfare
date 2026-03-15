@@ -3,9 +3,12 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 
 const THINKING_STEPS = [
-  "정보를 분석하고 있어요",
-  "정책을 검색하고 있어요",
-  "답변을 생성하고 있어요",
+  "질문의 의도를 파악하고 있어요",
+  "가장 적합한 복지 정보를 찾는 중이에요",
+  "관련 정책 데이터를 분석하고 있어요",
+  "데이터를 꼼꼼하게 대조하고 있어요",
+  "답변 내용을 정리하고 있어요",
+  "조금만 더 기다려 주세요",
 ];
 
 export function ThinkingIndicator() {
@@ -14,7 +17,7 @@ export function ThinkingIndicator() {
   useEffect(() => {
     const timer = setInterval(() => {
       setStepIndex((prev) => (prev + 1) % THINKING_STEPS.length);
-    }, 2500);
+    }, 6000);
     return () => clearInterval(timer);
   }, []);
 

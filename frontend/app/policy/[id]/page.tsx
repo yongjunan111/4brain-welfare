@@ -1,10 +1,12 @@
 // app/policy/[id]/page.tsx
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import Image from "next/image";
 import { fetchPolicyDetailById } from "@/features/policy/policy.api";
 import { ScrapButton } from "@/features/policy/ScrapButton";
 import { BackButton } from "@/components/common/BackButton";
 import { JOB_CODE_MAP, EDUCATION_CODE_MAP } from "@/constants/policy-codes";
+import { POLICY_CATEGORY_IMAGE } from "@/features/policy/policy.images";
+import { toPolicyCategoryFromName } from "@/features/policy/policy.constants";
 
 export default async function PolicyDetailPage({
     params,
@@ -15,11 +17,15 @@ export default async function PolicyDetailPage({
     const policy = await fetchPolicyDetailById(id);
 
     if (!policy) notFound();
+    const fallbackPoster = POLICY_CATEGORY_IMAGE[toPolicyCategoryFromName(policy.categories?.[0]?.name)];
 
     // 기간 포맷팅
     const formatDate = (date: string | null) => {
         if (!date) return "-";
-        return date;
+        const normalized = date.slice(0, 10);
+        const parsed = new Date(normalized);
+        if (Number.isNaN(parsed.getTime())) return date;
+        return `${parsed.getFullYear()}.${String(parsed.getMonth() + 1).padStart(2, "0")}.${String(parsed.getDate()).padStart(2, "0")}`;
     };
 
     const applyPeriod =
@@ -65,7 +71,7 @@ export default async function PolicyDetailPage({
 
 
                 {/* 제목 */}
-                <div className="mb-5 pb-3 flex items-start justify-between gap-4 border-b-1 border-gray-500">
+                <div className="mb-4 pb-3 flex items-start justify-between gap-4 border-b border-gray-500">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
                         {policy.title}
                     </h1>
@@ -73,22 +79,32 @@ export default async function PolicyDetailPage({
                 </div>
 
                 {/* ✅ 포스터 이미지 + 요약정보 영역 */}
-                <div className="mb-8 pb-2 flex w-full flex-col md:flex-row gap-8 lg:gap-25 bg-white overflow-hidden border-b-1 border-gray-500">
+                <div className="mb-8 pb-1 flex w-full flex-col md:flex-row gap-8 lg:gap-25 bg-white overflow-hidden border-b border-gray-500">
                     {/* 왼쪽: 포스터 이미지 */}
                     {policy.posterUrl ? (
                         <div className="flex w-full md:w-[320px] ml-15 flex-shrink-0 items-center justify-center bg-gray-50/50 p-6 rounded-xl">
                             <div className="relative w-[280px]">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
+                                <Image
                                     src={policy.posterUrl}
                                     alt={`${policy.title} 포스터`}
+                                    width={280}
+                                    height={396}
+                                    unoptimized
                                     className="w-full h-auto rounded-lg object-contain shadow-sm"
                                 />
                             </div>
                         </div>
                     ) : (
-                        <div className="hidden md:flex w-[320px] h-[370px] self-center flex-shrink-0 items-center justify-center bg-gray-100 text-gray-400 text-sm rounded-xl">
-                            포스터 이미지 없음
+                        <div className="flex w-full md:w-[320px] ml-15 flex-shrink-0 items-center justify-center bg-gray-50/50 p-6 rounded-xl">
+                            <div className="relative w-[280px]">
+                                <Image
+                                    src={fallbackPoster}
+                                    alt={`${policy.title} 기본 포스터`}
+                                    width={280}
+                                    height={396}
+                                    className="w-full h-auto rounded-lg object-contain shadow-sm"
+                                />
+                            </div>
                         </div>
                     )}
 

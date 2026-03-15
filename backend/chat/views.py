@@ -24,6 +24,15 @@ logger = logging.getLogger(__name__)
 CHAT_SESSION_TOKEN_HEADER = "X-Chat-Session-Token"
 SESSION_TOKEN_SALT = "chat.session.access"
 SESSION_TOKEN_MAX_AGE_SECONDS = 30 * 60
+LLM_RUNTIME_EXCEPTIONS = (
+    TimeoutError,
+    ConnectionError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    OSError,
+    ImportError,
+)
 
 
 def _load_int_env(name: str, default: int) -> int:
@@ -133,15 +142,6 @@ def _is_timeout_error(error_message: str | None) -> bool:
         or "timeout" in lowered
         or "time out" in lowered
     )
-
-
-def _format_policy_markdown_response(
-    original_text: str,
-    policies: list[dict],
-    max_items: int = 4,
-) -> str:
-    # Keep chatbot text fully controlled by prompt/LLM output.
-    return original_text
 
 
 class ChatSessionViewSet(viewsets.ModelViewSet):
@@ -263,6 +263,7 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user_content = serializer.validated_data["content"]
+        llm_user_content = user_content
         include_profile = serializer.validated_data.get("include_profile", False)
 
         # 프로필 정보 주입
@@ -293,14 +294,14 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
 
             if parts:
                 profile_context = "[사용자 프로필 정보] " + ", ".join(parts)
-                user_content = f"{profile_context}\n\n{user_content}"
+                llm_user_content = f"{profile_context}\n\n{user_content}"
 
         try:
             result = _run_agent_with_timeout_and_retry(
-                user_content,
+                llm_user_content,
                 thread_id=str(session.id),
             )
-        except Exception:
+        except LLM_RUNTIME_EXCEPTIONS:
             logger.exception("LLM call failed (session_id=%s)", session.id)
             return Response(
                 {"error": "Failed to generate AI response.", "code": "LLM_ERROR"},
@@ -341,7 +342,7 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
                         parsed = _json.loads(msg.content) if isinstance(msg.content, str) else msg.content
                         if isinstance(parsed, list):
                             eligibility_results.extend(parsed)
-                    except Exception:
+                    except (_json.JSONDecodeError, ValueError, TypeError):
                         continue
 
             eligible = [p for p in eligibility_results if p.get("is_eligible") is True]
@@ -374,15 +375,9 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
                             "deadline": str(deadline_str) if deadline_str else None,
                             "dday": dday,
                             "apply_url": db.get("apply_url"),
-                            "detail_url": None,
+                            "detail_url": db.get("detail_url"),
                         }
                     )
-
-        assistant_content = _format_policy_markdown_response(
-            assistant_content,
-            response_policies,
-            max_items=4,
-        )
 
         metadata = {
             "tool_calls": result.get("tool_calls", []),
