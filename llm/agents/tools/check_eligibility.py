@@ -384,7 +384,7 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
             )
 
         # 필수 정보 게이팅: 나이·거주지·소득 중 2개 이상 없으면 매칭 실행 안 함
-        _filled = sum(1 for k in ("age", "district", "income_level") if info.get(k))
+        _filled = sum(1 for k in ("age", "district", "income_level") if info.get(k) is not None)
         if _filled < 2:
             return json.dumps(
                 {
