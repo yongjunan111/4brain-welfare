@@ -467,12 +467,23 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
             }
             is_eligible, reasons = _judge(details)
 
+            _apply_end_date = policy.get("apply_end_date")
+            if isinstance(_apply_end_date, (date, datetime)):
+                _apply_end_date = _apply_end_date.isoformat()[:10]
+            elif not isinstance(_apply_end_date, str):
+                _apply_end_date = None
+
             result = {
-                "policy_id": policy.get("policy_id", ""),
-                "title": policy.get("title", ""),
+                "policy_id": policy.get("policy_id") or policy.get("plcy_no") or "",
+                "title": policy.get("title") or policy.get("plcy_nm") or "",
                 "is_eligible": is_eligible,
                 "reasons": reasons,
                 "details": details,
+                # 응답 구조화(PolicyResult 조립)에 필요한 추가 필드
+                "apply_url": policy.get("apply_url") or "",
+                "category": policy.get("category") or policy.get("category_name") or "",
+                "summary": policy.get("support_content") or policy.get("description") or "",
+                "apply_end_date": _apply_end_date,
             }
             if is_eligible is True:
                 result["_ranking_context"] = {

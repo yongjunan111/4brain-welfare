@@ -15,6 +15,7 @@
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -24,7 +25,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 
-from .schemas import ChatResponse
+from .schemas import ChatResponse, PolicyResult
 from .tools import create_tools
 from .tools.check_eligibility import PolicyFetcher
 from .prompts.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT, ORCHESTRATOR_SYSTEM_PROMPT_SHORT
@@ -197,6 +198,119 @@ def _extract_final_ai_text(messages: list) -> str:
     return ""
 
 
+_SEARCH_ENTRY_RE = re.compile(r"^(\d+)\.\s+(.+?)\s+\(([^)]+)\)", re.MULTILINE)
+_CAT_RE = re.compile(r"카테고리:\s*([^|\n]+)")
+_URL_RE = re.compile(r"신청:\s*(\S+)")
+_DESC_RE = re.compile(r"설명:\s*(.+)")
+
+
+def _parse_search_policies_text(text: str) -> list[PolicyResult]:
+    """search_policies 텍스트에서 기본 정책 목록을 파싱한다. eligibility는 uncertain."""
+    entries = re.split(r"\n(?=\d+\.\s+)", text)
+    policies: list[PolicyResult] = []
+    for entry in entries:
+        m = _SEARCH_ENTRY_RE.match(entry.strip())
+        if not m:
+            continue
+        title = m.group(2).strip()
+        policy_id = m.group(3).strip()
+
+        category = ""
+        cat_m = _CAT_RE.search(entry)
+        if cat_m:
+            category = cat_m.group(1).strip()
+
+        apply_url = None
+        url_m = _URL_RE.search(entry)
+        if url_m:
+            apply_url = url_m.group(1).strip()
+
+        summary = ""
+        desc_m = _DESC_RE.search(entry)
+        if desc_m:
+            summary = desc_m.group(1).strip()
+
+        try:
+            policies.append(
+                PolicyResult.from_dict(
+                    {
+                        "policy_id": policy_id,
+                        "title": title,
+                        "category": category,
+                        "summary": summary,
+                        "eligibility": None,
+                        "ineligible_reasons": [],
+                        "apply_url": apply_url,
+                    }
+                )
+            )
+        except (ValueError, TypeError):
+            pass
+    return policies
+
+
+def _extract_policies_from_messages(
+    messages: list,
+    *,
+    today=None,
+) -> list[PolicyResult] | None:
+    """ToolMessage에서 정책 목록을 추출한다.
+
+    check_eligibility ToolMessage → JSON 파싱 → PolicyResult 목록
+    search_policies ToolMessage만 있으면 → 텍스트 파싱 → uncertain PolicyResult 목록
+    도구 호출이 전혀 없으면 None 반환.
+    """
+    check_content: str | None = None
+    search_content: str | None = None
+
+    for msg in messages:
+        if getattr(msg, "type", "") == "tool":
+            name = getattr(msg, "name", "")
+            if name == "check_eligibility" and check_content is None:
+                check_content = msg.content if isinstance(msg.content, str) else None
+            elif name == "search_policies" and search_content is None:
+                search_content = msg.content if isinstance(msg.content, str) else None
+
+    if check_content is not None:
+        try:
+            data = json.loads(check_content)
+        except (json.JSONDecodeError, TypeError):
+            data = None
+        if isinstance(data, list):
+            policies: list[PolicyResult] = []
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                mapped = {
+                    "policy_id": item.get("policy_id"),
+                    "title": item.get("title"),
+                    "category": item.get("category"),
+                    "summary": item.get("summary"),
+                    "eligibility": item.get("is_eligible"),
+                    "ineligible_reasons": (
+                        item.get("reasons")
+                        if isinstance(item.get("reasons"), list)
+                        else []
+                    ),
+                    "deadline": item.get("apply_end_date"),
+                    "apply_url": item.get("apply_url"),
+                }
+                try:
+                    policies.append(PolicyResult.from_dict(mapped, today=today))
+                except (ValueError, TypeError):
+                    pass
+            return policies
+
+    if search_content is not None and search_content not in (
+        "검색 결과 없음",
+        "검색 중 오류가 발생했습니다",
+        "검색 백엔드가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.",
+    ):
+        return _parse_search_policies_text(search_content)
+
+    return None
+
+
 def _strip_json_code_fence(raw_text: str) -> str:
     stripped = raw_text.strip()
     if not stripped.startswith("```"):
@@ -282,6 +396,16 @@ def run_agent(
         messages = result.get("messages", [])
         raw_text = _extract_final_ai_text(messages)
         response, parsed_ok = _parse_chat_response(raw_text)
+
+        # ToolMessage 기반 policies 추출 (LLM JSON 파싱 대신 항상 도구 결과 사용)
+        extracted_policies = _extract_policies_from_messages(messages)
+        if extracted_policies is not None:
+            response = ChatResponse(
+                message=response.message,
+                policies=extracted_policies,
+                follow_up=response.follow_up,
+                stage="complete",
+            )
         
         # 도구 호출 추출
         tool_calls = []
