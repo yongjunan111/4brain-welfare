@@ -383,6 +383,19 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
                 ensure_ascii=False,
             )
 
+        # 필수 정보 게이팅: 나이·거주지·소득 중 2개 이상 없으면 매칭 실행 안 함
+        _filled = sum(1 for k in ("age", "district", "income_level") if info.get(k))
+        if _filled < 2:
+            return json.dumps(
+                {
+                    "error": "사용자 정보 부족",
+                    "message": "나이, 거주지, 소득 중 2개 이상이 필요합니다.",
+                    "policies_checked": 0,
+                    "guide": "나이 → 거주지 → 소득 순으로 추가 질문 후 다시 호출하세요.",
+                },
+                ensure_ascii=False,
+            )
+
         is_all_mode = isinstance(policies, str) and policies.strip() in ("all", "all_policies")
         if is_all_mode:
             try:
