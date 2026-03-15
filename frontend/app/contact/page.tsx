@@ -100,7 +100,7 @@ export default function ContactPage() {
       <p className="mb-6 text-sm text-gray-700">{CAMPUS.address}</p>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 lg:col-span-3 lg:h-full">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 lg:col-span-3">
           {loading && <div className="p-8 text-center text-sm text-gray-500">지도를 불러오는 중입니다.</div>}
           {error && (
             <div className="p-8 text-center text-sm text-red-500">
@@ -108,7 +108,7 @@ export default function ContactPage() {
             </div>
           )}
           {!loading && !error && (
-            <Map center={center} level={3} style={{ width: "100%", height: "100%" }} className="min-h-[300px] lg:min-h-full">
+            <Map center={center} level={3} style={{ width: "100%", height: "420px" }}>
               <MapMarker position={center} title={CAMPUS.name} />
             </Map>
           )}

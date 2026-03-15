@@ -1,4 +1,4 @@
-import ReactMarkdown from "react-markdown";
+﻿import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { TERMS_OF_SERVICE } from "@/features/auth/terms/termsData";
@@ -13,4 +13,3 @@ export default function TermsPage() {
     </main>
   );
 }
-

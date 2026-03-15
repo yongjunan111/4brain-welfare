@@ -58,18 +58,18 @@ export function Footer() {
           <dl className="mt-3 space-y-2 text-sm text-gray-600">
             <div className="flex gap-2">
               <dt className="w-14 shrink-0 text-gray-500">주소</dt>
-              <dd className="break-keep">{FOOTER.orgInfo.address}</dd>
+              <dd className="min-w-0 flex-1 break-keep">{FOOTER.orgInfo.address}</dd>
             </div>
 
             <div className="flex flex-wrap gap-x-6 gap-y-2">
-              <div className="flex gap-2">
+              <div className="flex min-w-0 flex-1 gap-2">
                 <dt className="w-14 shrink-0 text-gray-500">전화</dt>
                 <dd>{FOOTER.orgInfo.tel}</dd>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex min-w-0 flex-1 gap-2">
                 <dt className="w-14 shrink-0 text-gray-500">Email</dt>
-                <dd className="break-all">{FOOTER.orgInfo.email}</dd>
+                <dd className="min-w-0 break-words">{FOOTER.orgInfo.email}</dd>
               </div>
             </div>
 
