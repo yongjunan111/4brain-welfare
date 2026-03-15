@@ -167,7 +167,7 @@ class TestPolicyInfoToResult:
 
 
 class TestBuildChatResponse:
-    def test_builds_response_with_index_matching(self):
+    def test_builds_response_with_policy_id_mapping(self):
         response = build_chat_response(
             message="추천 결과예요.",
             policies=[
@@ -184,10 +184,10 @@ class TestBuildChatResponse:
                     "summary": "두 번째 정책",
                 },
             ],
-            eligibility_results=[
-                {"is_eligible": True, "reasons": []},
-                {"is_eligible": None, "reasons": ["소득 정보 없음"]},
-            ],
+            eligibility_results={
+                "P1": {"is_eligible": True, "reasons": []},
+                "P2": {"is_eligible": None, "reasons": ["소득 정보 없음"]},
+            },
             follow_up="원하시면 더 추려드릴게요.",
             today=date(2026, 3, 8),
         )
@@ -201,21 +201,13 @@ class TestBuildChatResponse:
         response = build_chat_response(
             message="검색 결과가 없어요.",
             policies=[],
-            eligibility_results=[],
+            eligibility_results={},
             today=date(2026, 3, 8),
         )
 
         assert response.message == "검색 결과가 없어요."
         assert response.policies == []
         assert response.follow_up is None
-
-    def test_raises_on_length_mismatch(self):
-        with pytest.raises(ValueError):
-            build_chat_response(
-                message="길이 불일치",
-                policies=[{"policy_id": "P1"}],
-                eligibility_results=[],
-            )
 
 
 class TestDdayBehavior:
@@ -264,3 +256,48 @@ class TestDdayBehavior:
         )
 
         assert result.dday == -7
+
+
+class TestBuildChatResponsePolicyIdMapping:
+    """build_chat_response는 policy_id 기반 dict 매핑을 사용하므로
+    check_eligibility가 적격 정책을 재정렬해도 매핑이 뒤바뀌지 않는다."""
+
+    def test_correct_mapping_by_policy_id(self):
+        """policy_id로 매핑하므로 policies 순서와 무관하게 올바른 자격판정이 붙는다."""
+        response = build_chat_response(
+            message="결과입니다.",
+            policies=[
+                {"policy_id": "A", "title": "정책A", "category": "주거"},
+                {"policy_id": "B", "title": "정책B", "category": "취업"},
+            ],
+            eligibility_results={
+                "A": {"is_eligible": True, "reasons": []},
+                "B": {"is_eligible": False, "reasons": ["나이 미충족"]},
+            },
+            today=date(2026, 3, 8),
+        )
+
+        assert response.policies[0].plcy_no == "A"
+        assert response.policies[0].eligibility.value == "eligible"
+        assert response.policies[1].plcy_no == "B"
+        assert response.policies[1].eligibility.value == "ineligible"
+
+    def test_reordered_policies_still_map_correctly(self):
+        """check_eligibility가 재정렬해도 policy_id 기준으로 매핑되므로 결과가 뒤바뀌지 않는다."""
+        response = build_chat_response(
+            message="재정렬된 결과.",
+            policies=[
+                {"policy_id": "B", "title": "정책B"},
+                {"policy_id": "A", "title": "정책A"},
+            ],
+            eligibility_results={
+                "A": {"is_eligible": True, "reasons": []},
+                "B": {"is_eligible": False, "reasons": ["나이 미충족"]},
+            },
+            today=date(2026, 3, 8),
+        )
+
+        assert response.policies[0].plcy_no == "B"
+        assert response.policies[0].eligibility.value == "ineligible"
+        assert response.policies[1].plcy_no == "A"
+        assert response.policies[1].eligibility.value == "eligible"

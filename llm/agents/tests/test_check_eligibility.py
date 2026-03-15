@@ -9,6 +9,7 @@ check_eligibility 룰베이스 테스트
 
 import json
 import logging
+from datetime import date, timedelta
 
 
 def _policy(**overrides):
@@ -72,6 +73,28 @@ def _first(policy, user_info):
     assert isinstance(result, list)
     assert len(result) == 1
     return result[0]
+
+
+def _eligible_row(**overrides):
+    row = {
+        "policy_id": "R001",
+        "title": "기본 정책",
+        "description": "",
+        "support_content": "",
+        "category": "",
+        "apply_end_date": None,
+        "is_eligible": True,
+        "reasons": [],
+        "details": {},
+    }
+    row.update(overrides)
+    return row
+
+
+def _rank(rows, user_info):
+    from llm.agents.tools.check_eligibility import _rank_eligible_policies
+
+    return _rank_eligible_policies(rows, user_info)
 
 
 class TestAgeRules:
@@ -296,13 +319,13 @@ class TestJudgeRules:
 
         assert isinstance(rows, list)
         assert len(rows) == 5
-        assert [row["policy_id"] for row in rows] == ["Q1", "Q2", "Q3", "Q4", "Q5"]
-        assert [row["is_eligible"] for row in rows] == [True, False, False, False, True]
+        assert [row["policy_id"] for row in rows] == ["Q1", "Q5", "Q2", "Q3", "Q4"]
+        assert [row["is_eligible"] for row in rows] == [True, True, False, False, False]
         assert rows[0]["reasons"] == []
-        assert any("나이 미충족" in reason for reason in rows[1]["reasons"])
-        assert any("소득 미충족" in reason for reason in rows[2]["reasons"])
-        assert any("지역 미충족" in reason for reason in rows[3]["reasons"])
-        assert rows[4]["reasons"] == []
+        assert rows[1]["reasons"] == []
+        assert any("나이 미충족" in reason for reason in rows[2]["reasons"])
+        assert any("소득 미충족" in reason for reason in rows[3]["reasons"])
+        assert any("지역 미충족" in reason for reason in rows[4]["reasons"])
 
     def test_non_dict_policy_items_are_skipped_with_warning(self, caplog):
         policies = [
@@ -358,6 +381,35 @@ class TestErrorHandling:
         assert "user_info는 JSON 객체" in data["error"]
         assert data["policies_checked"] == 0
 
+    def test_all_mode_fetcher_exception_returns_guide_error(self):
+        def fetcher(_policy_ids):
+            raise RuntimeError("db down")
+
+        data = _invoke_raw(
+            "all",
+            json.dumps(_user(), ensure_ascii=False),
+            policy_fetcher=fetcher,
+        )
+
+        assert data == {
+            "error": "전체 정책 조회 실패: db down",
+            "policies_checked": 0,
+            "guide": "조건을 좁혀서 다시 질문해주세요",
+        }
+
+    def test_all_mode_empty_fetcher_returns_guide_error(self):
+        data = _invoke_raw(
+            "all",
+            json.dumps(_user(), ensure_ascii=False),
+            policy_fetcher=lambda _policy_ids: [],
+        )
+
+        assert data == {
+            "error": "정책 데이터를 불러올 수 없습니다",
+            "policies_checked": 0,
+            "guide": "조건을 좁혀서 다시 질문해주세요",
+        }
+
 
 class TestNeedsFiltering:
     def test_all_mode_filters_by_needs_category(self):
@@ -375,6 +427,193 @@ class TestNeedsFiltering:
         assert isinstance(rows, list)
         assert [row["policy_id"] for row in rows] == ["H1"]
 
+
+
+class TestRankPolicies:
+    def test_deadline_soon_policy_ranks_above_later_policy(self):
+        ranked = _rank(
+            [
+                _eligible_row(
+                    policy_id="LATE",
+                    title="일반 지원 정책",
+                    apply_end_date=(date.today() + timedelta(days=30)).strftime("%Y-%m-%d"),
+                ),
+                _eligible_row(
+                    policy_id="SOON",
+                    title="일반 지원 정책",
+                    apply_end_date=date.today() + timedelta(days=3),
+                ),
+            ],
+            {},
+        )
+
+        assert [row["policy_id"] for row in ranked] == ["SOON", "LATE"]
+        assert ranked[0]["_priority_score"] > ranked[1]["_priority_score"]
+
+    def test_youth_policy_ranks_above_non_youth_policy(self):
+        ranked = _rank(
+            [
+                _eligible_row(policy_id="NORMAL", title="일반 지원 정책"),
+                _eligible_row(policy_id="YOUTH", title="청년 지원 정책"),
+            ],
+            {},
+        )
+
+        assert [row["policy_id"] for row in ranked] == ["YOUTH", "NORMAL"]
+
+    def test_need_category_match_ranks_higher(self):
+        ranked = _rank(
+            [
+                _eligible_row(policy_id="HOUSE", title="맞춤 정책", category="주거"),
+                _eligible_row(policy_id="JOB", title="맞춤 정책", category="취업"),
+            ],
+            {"needs": ["취업"]},
+        )
+
+        assert [row["policy_id"] for row in ranked] == ["JOB", "HOUSE"]
+
+    def test_string_need_is_supported(self):
+        ranked = _rank(
+            [
+                _eligible_row(policy_id="HOUSE", title="맞춤 정책", category="주거"),
+                _eligible_row(policy_id="JOB", title="맞춤 정책", category="취업"),
+            ],
+            {"needs": "취업"},
+        )
+
+        assert [row["policy_id"] for row in ranked] == ["JOB", "HOUSE"]
+
+    def test_employment_status_match_ranks_higher(self):
+        ranked = _rank(
+            [
+                _eligible_row(policy_id="CULTURE", title="문화 지원 정책"),
+                _eligible_row(policy_id="JOB", title="취업 지원 정책"),
+            ],
+            {"employment_status": "구직중"},
+        )
+
+        assert [row["policy_id"] for row in ranked] == ["JOB", "CULTURE"]
+
+    def test_employment_status_changup_jun_bi_matches_canonical(self):
+        """창업준비 canonical value가 창업 관련 정책에 가중치를 부여한다."""
+        ranked = _rank(
+            [
+                _eligible_row(policy_id="CULTURE", title="문화 지원 정책"),
+                _eligible_row(policy_id="BIZ", title="창업 지원 정책"),
+            ],
+            {"employment_status": "창업준비"},
+        )
+
+        assert [row["policy_id"] for row in ranked] == ["BIZ", "CULTURE"]
+
+    def test_employment_status_jayeongup_matches_canonical(self):
+        """자영업 canonical value가 자영업 관련 정책에 가중치를 부여한다."""
+        ranked = _rank(
+            [
+                _eligible_row(policy_id="CULTURE", title="문화 지원 정책"),
+                _eligible_row(policy_id="SHOP", title="소상공인 지원 정책"),
+            ],
+            {"employment_status": "자영업"},
+        )
+
+        assert [row["policy_id"] for row in ranked] == ["SHOP", "CULTURE"]
+
+    def test_employment_status_freelancer_matches_canonical(self):
+        """프리랜서 canonical value가 프리랜서 관련 정책에 가중치를 부여한다."""
+        ranked = _rank(
+            [
+                _eligible_row(policy_id="CULTURE", title="문화 지원 정책"),
+                _eligible_row(policy_id="FREE", title="프리랜서 지원 정책"),
+            ],
+            {"employment_status": "프리랜서"},
+        )
+
+        assert [row["policy_id"] for row in ranked] == ["FREE", "CULTURE"]
+
+    def test_employment_status_changup_does_not_get_bonus(self):
+        """'창업'은 extract_info canonical value가 아니라 가중치가 적용되지 않는다.
+        '창업준비'가 canonical value이며 창업 관련 정책에 가중치를 받는다."""
+        ranked_changup = _rank(
+            [
+                _eligible_row(policy_id="CULTURE", title="문화 지원 정책"),
+                _eligible_row(policy_id="BIZ", title="창업 사업 지원 정책"),
+            ],
+            {"employment_status": "창업"},  # non-canonical value
+        )
+        ranked_changup_junbi = _rank(
+            [
+                _eligible_row(policy_id="CULTURE", title="문화 지원 정책"),
+                _eligible_row(policy_id="BIZ", title="창업 사업 지원 정책"),
+            ],
+            {"employment_status": "창업준비"},  # canonical value
+        )
+
+        # 창업(non-canonical)은 가중치 없어 순서 유지, 창업준비(canonical)는 BIZ가 앞으로
+        assert ranked_changup[0]["policy_id"] == "CULTURE"
+        assert ranked_changup_junbi[0]["policy_id"] == "BIZ"
+
+    def test_monthly_rent_housing_bonus_applied(self):
+        ranked = _rank(
+            [
+                _eligible_row(policy_id="GENERAL", title="일반 혜택 정책"),
+                _eligible_row(policy_id="MONTHLY", title="월세 지원 정책"),
+            ],
+            {"housing_type": "월세"},
+        )
+
+        assert [row["policy_id"] for row in ranked] == ["MONTHLY", "GENERAL"]
+        assert ranked[0]["_priority_score"] > ranked[1]["_priority_score"]
+
+    def test_owned_housing_penalty_applied(self):
+        ranked = _rank(
+            [
+                _eligible_row(policy_id="MONTHLY", title="월세 지원 정책"),
+                _eligible_row(policy_id="GENERAL", title="일반 지원 정책"),
+            ],
+            {"housing_type": "자가"},
+        )
+
+        assert [row["policy_id"] for row in ranked] == ["GENERAL", "MONTHLY"]
+        assert ranked[1]["_priority_score"] < ranked[0]["_priority_score"]
+
+    def test_empty_eligible_returns_empty_list(self):
+        assert _rank([], {}) == []
+
+    def test_missing_optional_user_fields_does_not_error(self):
+        ranked = _rank([_eligible_row(policy_id="SAFE", title="지원 정책")], {})
+
+        assert [row["policy_id"] for row in ranked] == ["SAFE"]
+        assert "_priority_score" in ranked[0]
+
+    def test_priority_score_key_is_included(self):
+        ranked = _rank(
+            [_eligible_row(policy_id="MONEY", title="지원 정책", support_content="월 20만원 지원금")],
+            {},
+        )
+
+        assert "_priority_score" in ranked[0]
+        assert ranked[0]["_priority_score"] >= 25
+
+    def test_check_eligibility_sorts_eligible_first_and_preserves_ineligible_order(self):
+        policies = [
+            _policy(policy_id="E1", title="일반 정책", district="서울"),
+            _policy(policy_id="N1", title="나이부적격", age_min=19, age_max=24, district="서울"),
+            _policy(
+                policy_id="E2",
+                title="청년 지원 정책",
+                district="서울",
+                apply_end_date=(date.today() + timedelta(days=3)).strftime("%Y-%m-%d"),
+            ),
+            _policy(policy_id="N2", title="지역부적격", district="서초구"),
+        ]
+
+        rows = _invoke(policies, _user(age=25, income=2400, residence="강남구"))
+
+        assert [row["policy_id"] for row in rows] == ["E2", "E1", "N1", "N2"]
+        assert [row["is_eligible"] for row in rows] == [True, True, False, False]
+        assert rows[0]["_priority_score"] > rows[1]["_priority_score"]
+        assert "_priority_score" not in rows[2]
+        assert "_priority_score" not in rows[3]
 
 
 class TestUserInfoCompatibilityAliases:

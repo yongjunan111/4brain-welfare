@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date, datetime
 from typing import Any, Callable, Optional
 
 from langchain_core.tools import BaseTool, tool
@@ -240,6 +241,113 @@ def _judge(details: dict[str, dict[str, Any]]) -> tuple[bool | None, list[str]]:
     return True, []
 
 
+def _rank_eligible_policies(
+    eligible: list[dict[str, Any]],
+    user_info: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """적격 정책 리스트를 룰베이스 점수로 정렬하여 반환한다."""
+    if not eligible:
+        return eligible
+
+    raw_user_needs = user_info.get("needs")
+    if isinstance(raw_user_needs, str):
+        raw_user_needs = [raw_user_needs]
+    user_needs = _normalize_needs(raw_user_needs)
+    user_housing = _normalize_text(user_info.get("housing_type")).lower()
+    user_employment = _normalize_text(user_info.get("employment_status")).lower()
+
+    # extract_info canonical value 기준: {"재직", "자영업", "무직", "구직중", "학생", "창업준비", "프리랜서"}
+    employment_keywords = {
+        "구직중": ["취업", "구직", "취준", "일자리"],
+        "재직": ["재직", "직장인", "근로"],
+        "자영업": ["자영업", "소상공인", "가게"],
+        "창업준비": ["창업", "사업", "스타트업"],
+        "학생": ["대학", "학생", "학자금"],
+        "무직": ["취업", "구직", "일자리"],
+        "프리랜서": ["프리랜서", "계약직", "알바"],
+    }
+    core_keywords = ["지원", "혜택", "무료", "할인", "교육", "상담"]
+    money_amount_keywords = ["만원", "백만", "천만", "억원"]
+    money_support_keywords = ["지원금", "보조금", "장학금", "수당"]
+    money_discount_keywords = ["감면", "할인", "무료"]
+
+    for policy in eligible:
+        ranking_context = policy.pop("_ranking_context", None)
+        if not isinstance(ranking_context, dict):
+            ranking_context = {}
+
+        score = 0
+        title = _normalize_text(policy.get("title") or ranking_context.get("title")).lower()
+        description = _normalize_text(
+            policy.get("description") or ranking_context.get("description")
+        ).lower()
+        support_content = _normalize_text(
+            policy.get("support_content") or ranking_context.get("support_content")
+        ).lower()
+        category = _normalize_text(
+            policy.get("category")
+            or ranking_context.get("category")
+            or policy.get("category_name")
+            or ranking_context.get("category_name")
+        ).lower()
+        title_and_description = f"{title} {description}"
+
+        if "청년" in title:
+            score += 30
+
+        if any(keyword in support_content for keyword in money_amount_keywords):
+            score += 25
+        elif any(keyword in support_content for keyword in money_support_keywords):
+            score += 15
+        elif any(keyword in support_content for keyword in money_discount_keywords):
+            score += 5
+
+        if category and any(need.lower() in category for need in user_needs):
+            score += 20
+
+        if any(need.lower() in title or need.lower() in description for need in user_needs if need):
+            score += 10
+
+        if user_housing in {"자가", "자가소유"} and any(
+            keyword in title_and_description for keyword in ("월세", "전세", "임차")
+        ):
+            score -= 30
+        elif user_housing in {"월세", "전세", "전월세"} and any(
+            keyword in title_and_description for keyword in ("월세", "전세", "임차", "주거")
+        ):
+            score += 40
+
+        if any(keyword in title for keyword in employment_keywords.get(user_employment, [])):
+            score += 20
+
+        if any(keyword in title for keyword in core_keywords):
+            score += 10
+
+        end_date_raw = policy.get("apply_end_date") or ranking_context.get("apply_end_date")
+        end_date: date | None = None
+        if isinstance(end_date_raw, datetime):
+            end_date = end_date_raw.date()
+        elif isinstance(end_date_raw, date):
+            end_date = end_date_raw
+        elif isinstance(end_date_raw, str):
+            try:
+                end_date = datetime.strptime(end_date_raw, "%Y-%m-%d").date()
+            except ValueError:
+                end_date = None
+
+        if end_date is not None:
+            days_left = (end_date - date.today()).days
+            if 0 <= days_left <= 7:
+                score += 20
+            elif 7 < days_left <= 14:
+                score += 10
+
+        policy["_priority_score"] = score
+
+    eligible.sort(key=lambda item: item.get("_priority_score", 0), reverse=True)
+    return eligible
+
+
 def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
     """policy_fetcher를 주입받아 check_eligibility 도구를 생성한다."""
 
@@ -282,8 +390,18 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
             except Exception as exc:
                 return json.dumps(
                     {
-                        "error": f"policy fetch 실패: {str(exc)}",
+                        "error": f"전체 정책 조회 실패: {str(exc)}",
                         "policies_checked": 0,
+                        "guide": "조건을 좁혀서 다시 질문해주세요",
+                    },
+                    ensure_ascii=False,
+                )
+            if not policies_list:
+                return json.dumps(
+                    {
+                        "error": "정책 데이터를 불러올 수 없습니다",
+                        "policies_checked": 0,
+                        "guide": "조건을 좁혀서 다시 질문해주세요",
                     },
                     ensure_ascii=False,
                 )
@@ -330,7 +448,8 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
                 if isinstance(policy, dict) and _policy_matches_need(policy, user_needs)
             ]
 
-        results: list[dict[str, Any]] = []
+        eligible_results: list[dict[str, Any]] = []
+        ineligible_results: list[dict[str, Any]] = []
         for idx, policy_item in enumerate(policies_list):
             if not isinstance(policy_item, dict):
                 logger.warning(
@@ -348,16 +467,27 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
             }
             is_eligible, reasons = _judge(details)
 
-            results.append(
-                {
-                    "policy_id": policy.get("policy_id", ""),
+            result = {
+                "policy_id": policy.get("policy_id", ""),
+                "title": policy.get("title", ""),
+                "is_eligible": is_eligible,
+                "reasons": reasons,
+                "details": details,
+            }
+            if is_eligible is True:
+                result["_ranking_context"] = {
                     "title": policy.get("title", ""),
-                    "is_eligible": is_eligible,
-                    "reasons": reasons,
-                    "details": details,
+                    "description": policy.get("description", ""),
+                    "support_content": policy.get("support_content", ""),
+                    "category": policy.get("category", ""),
+                    "category_name": policy.get("category_name", ""),
+                    "apply_end_date": policy.get("apply_end_date"),
                 }
-            )
+                eligible_results.append(result)
+            else:
+                ineligible_results.append(result)
 
-        return json.dumps(results, ensure_ascii=False)
+        ranked_eligible = _rank_eligible_policies(eligible_results, info)
+        return json.dumps(ranked_eligible + ineligible_results, ensure_ascii=False)
 
     return check_eligibility
