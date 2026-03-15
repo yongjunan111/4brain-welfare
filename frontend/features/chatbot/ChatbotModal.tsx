@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { useChatbotStore } from "@/stores/chatbot.store";
 import { ChatWindow } from "./ChatWindow";
 
-const VIEWPORT_GAP = 16;
+const VIEWPORT_GAP = 0;
 const MIN_WIDTH = 340;
 const MIN_HEIGHT = 420;
 
@@ -264,7 +264,7 @@ export function ChatbotModal() {
     >
       <div className="flex h-full w-full flex-col overflow-hidden rounded-sm">
         <div
-          className={`flex items-center justify-between border-b bg-slate-50 px-4 py-2 ${isMaximized ? "cursor-default" : "cursor-move"}`}
+          className={`flex items-center justify-between border-b bg-slate-200 pl-4 pr-1 py-1 ${isMaximized ? "cursor-default" : "cursor-move"}`}
           onPointerDown={handleDragStart}
         >
           <div className="text-sm font-semibold">복지 상담 챗봇</div>

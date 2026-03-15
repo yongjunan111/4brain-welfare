@@ -1,8 +1,9 @@
-// stores/chatbot.store.ts
+﻿// stores/chatbot.store.ts
 import { create } from "zustand";
 import { createJSONStorage, devtools, persist } from "zustand/middleware";
-import type { ChatMessage } from "@/features/chatbot/chatbot.types";
+
 import { chatbotApi } from "@/features/chatbot/chatbot.api";
+import type { ChatMessage } from "@/features/chatbot/chatbot.types";
 
 interface ChatbotState {
   isOpen: boolean;
@@ -32,6 +33,15 @@ interface ChatbotState {
 
 const DEFAULT_PANEL_WIDTH = 420;
 const DEFAULT_PANEL_HEIGHT = 620;
+
+function buildAssistantNotice(content: string): ChatMessage {
+  return {
+    id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2),
+    role: "assistant",
+    content,
+    createdAt: Date.now(),
+  };
+}
 
 export const useChatbotStore = create<ChatbotState>()(
   devtools(
@@ -92,6 +102,11 @@ export const useChatbotStore = create<ChatbotState>()(
             });
           } catch (error) {
             console.error("Failed to create chat session:", error);
+            set({
+              messages: [
+                buildAssistantNotice("대화 세션을 시작하지 못했습니다. 잠시 후 다시 시도해주세요."),
+              ],
+            });
           } finally {
             set({ isLoading: false });
           }
@@ -143,28 +158,40 @@ export const useChatbotStore = create<ChatbotState>()(
               includeProfile,
             );
 
+            const normalizedUserMessage: ChatMessage = {
+              ...response.userMessage,
+              // UI에는 원문 입력만 노출 (프로필 컨텍스트는 서버 내부 추론용)
+              content,
+            };
+
             set((state) => ({
               messages: [
                 ...state.messages.slice(0, -1),
-                response.userMessage,
+                normalizedUserMessage,
                 response.assistantMessage,
               ],
             }));
           } catch (error) {
             console.error("Failed to send message:", error);
+            set((state) => ({
+              messages: [
+                ...state.messages.slice(0, -1),
+                buildAssistantNotice("메시지 전송에 실패했습니다. 다시 시도해주세요."),
+              ],
+            }));
           } finally {
             set({ isLoading: false });
           }
         },
       }),
       {
-        name: "welfarecompass:chatbot_state",
+        name: "welfarecompass:chatbot_ui_v2",
         storage: createJSONStorage(() => localStorage),
         partialize: (state) => ({
-          sessionId: state.sessionId,
-          sessionToken: state.sessionToken,
-          messages: state.messages,
-          hasProfileData: state.hasProfileData,
+          panelWidth: state.panelWidth,
+          panelHeight: state.panelHeight,
+          panelX: state.panelX,
+          panelY: state.panelY,
         }),
       },
     ),

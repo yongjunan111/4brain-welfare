@@ -24,6 +24,15 @@ logger = logging.getLogger(__name__)
 CHAT_SESSION_TOKEN_HEADER = "X-Chat-Session-Token"
 SESSION_TOKEN_SALT = "chat.session.access"
 SESSION_TOKEN_MAX_AGE_SECONDS = 30 * 60
+LLM_RUNTIME_EXCEPTIONS = (
+    TimeoutError,
+    ConnectionError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    OSError,
+    ImportError,
+)
 
 
 def _load_int_env(name: str, default: int) -> int:
@@ -254,6 +263,7 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user_content = serializer.validated_data["content"]
+        llm_user_content = user_content
         include_profile = serializer.validated_data.get("include_profile", False)
 
         # 프로필 정보 주입
@@ -284,14 +294,14 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
 
             if parts:
                 profile_context = "[사용자 프로필 정보] " + ", ".join(parts)
-                user_content = f"{profile_context}\n\n{user_content}"
+                llm_user_content = f"{profile_context}\n\n{user_content}"
 
         try:
             result = _run_agent_with_timeout_and_retry(
-                user_content,
+                llm_user_content,
                 thread_id=str(session.id),
             )
-        except Exception:
+        except LLM_RUNTIME_EXCEPTIONS:
             logger.exception("LLM call failed (session_id=%s)", session.id)
             return Response(
                 {"error": "Failed to generate AI response.", "code": "LLM_ERROR"},
@@ -314,10 +324,64 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        assistant_content = result["response"].message
+        chat_response = result["response"]
+        assistant_content = chat_response.message
+        response_policies = []
+        for policy in getattr(chat_response, "policies", []) or []:
+            if hasattr(policy, "to_dict"):
+                response_policies.append(policy.to_dict())
+            elif isinstance(policy, dict):
+                response_policies.append(policy)
+
+        # LLM이 structured policies를 비워 보낸 경우, check_eligibility ToolMessage에서 복구한다.
+        if not response_policies:
+            eligibility_results: list[dict] = []
+            for msg in result.get("messages", []):
+                if getattr(msg, "type", "") == "tool" and getattr(msg, "name", "") == "check_eligibility":
+                    try:
+                        parsed = _json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+                        if isinstance(parsed, list):
+                            eligibility_results.extend(parsed)
+                    except (_json.JSONDecodeError, ValueError, TypeError):
+                        continue
+
+            eligible = [p for p in eligibility_results if p.get("is_eligible") is True]
+            uncertain = [p for p in eligibility_results if p.get("is_eligible") is None]
+            candidates = eligible + uncertain
+
+            if candidates:
+                policy_ids = [p.get("policy_id") for p in candidates if p.get("policy_id")]
+                db_map = {p["policy_id"]: p for p in _fetch_policies_for_agent(policy_ids)}
+                today = _date.today()
+                for item in candidates:
+                    policy_id = item.get("policy_id", "")
+                    db = db_map.get(policy_id, {})
+                    deadline_str = db.get("apply_end_date")
+                    dday = None
+                    if deadline_str:
+                        try:
+                            dday = (_date.fromisoformat(str(deadline_str)) - today).days
+                        except (ValueError, TypeError):
+                            dday = None
+
+                    response_policies.append(
+                        {
+                            "plcy_no": policy_id,
+                            "plcy_nm": item.get("title") or db.get("title", ""),
+                            "category": db.get("category", ""),
+                            "summary": db.get("description") or db.get("support_content", ""),
+                            "eligibility": "eligible" if item.get("is_eligible") is True else "uncertain",
+                            "ineligible_reasons": item.get("reasons", []),
+                            "deadline": str(deadline_str) if deadline_str else None,
+                            "dday": dday,
+                            "apply_url": db.get("apply_url"),
+                            "detail_url": db.get("detail_url"),
+                        }
+                    )
+
         metadata = {
             "tool_calls": result.get("tool_calls", []),
-            "policies": [p.to_dict() for p in result["response"].policies],
+            "policies": response_policies,
         }
 
         with transaction.atomic():

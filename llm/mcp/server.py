@@ -1,4 +1,4 @@
-"""복지나침반 MCP 서버 (stdio / sse)."""
+﻿"""Welfare MCP server (stdio / sse)."""
 
 from __future__ import annotations
 
@@ -34,8 +34,8 @@ if FastMCP is not None:
     @mcp.tool()
     def search_policies(query: str, top_k: int = 10) -> dict:
         """
-        정책 검색 통합 도구.
-        내부적으로 rewrite -> BGE retrieve/rerank -> PostgreSQL 조회를 수행한다.
+        Policy search tool.
+        Internally runs rewrite -> retrieve/rerank -> PostgreSQL lookup.
         """
         return search_policies_tool(query=query, top_k=top_k)
 else:  # pragma: no cover
@@ -56,7 +56,7 @@ def _warmup() -> None:
 
 def main() -> None:
     if mcp is None:
-        raise RuntimeError("mcp 패키지가 설치되지 않았습니다. `uv sync` 후 실행하세요.")
+        raise RuntimeError("mcp package is not installed. Run `uv sync` first.")
 
     logging.basicConfig(
         level=logging.INFO,

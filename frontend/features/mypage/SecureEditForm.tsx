@@ -155,7 +155,12 @@ export function SecureEditForm() {
 
     async function handleDeleteAccount() {
         if (!deletePw.trim()) {
-            setDeleteError("비밀번호를 입력해주세요.");
+            setDeleteError("\uBE44\uBC00\uBC88\uD638\uB97C \uC785\uB825\uD574\uC8FC\uC138\uC694.");
+            return;
+        }
+        if (!reauthToken) {
+            setDeleteError("\uC7AC\uC778\uC99D \uC815\uBCF4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4. \uB2E4\uC2DC \uC778\uC99D\uD574\uC8FC\uC138\uC694.");
+            router.replace("/mypage/verify");
             return;
         }
 
@@ -165,13 +170,18 @@ export function SecureEditForm() {
         try {
             await api.delete("/api/accounts/delete/", {
                 data: { password: deletePw },
-                headers: reauthToken ? { "X-Reauth-Token": reauthToken } : {}
+                headers: { "X-Reauth-Token": reauthToken },
             });
 
-            alert("회원탈퇴가 완료되었습니다. 이용해주셔서 감사합니다.");
+            alert("\uD68C\uC6D0\uD0C8\uD1F4\uAC00 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4. \uC774\uC6A9\uD574\uC8FC\uC154\uC11C \uAC10\uC0AC\uD569\uB2C8\uB2E4.");
             window.location.href = "/";
         } catch (error: any) {
-            const message = error.response?.data?.error || "회원탈퇴에 실패했습니다.";
+            if (error.response?.status === 403) {
+                setDeleteError("\uC7AC\uC778\uC99D\uC774 \uB9CC\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4. \uB2E4\uC2DC \uC778\uC99D\uD574\uC8FC\uC138\uC694.");
+                router.replace("/mypage/verify");
+                return;
+            }
+            const message = error.response?.data?.error || "\uD68C\uC6D0\uD0C8\uD1F4\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.";
             setDeleteError(message);
         } finally {
             setIsDeleting(false);

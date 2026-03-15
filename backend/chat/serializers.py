@@ -30,7 +30,10 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 
     def get_policies(self, obj):
         """assistant 메시지의 정책 카드 데이터 (없으면 빈 배열)"""
-        return obj.metadata.get('policies', [])
+        policies = obj.metadata.get('policies', [])
+        if not isinstance(policies, list):
+            return []
+        return policies
 
 
 class ChatSessionSerializer(serializers.ModelSerializer):

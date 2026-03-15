@@ -27,12 +27,18 @@ export function UserMenu() {
 
   if (isAuthenticated) {
     return (
-      <div className="flex items-center gap-1 text-xs text-gray-700 md:gap-3 md:text-sm">
-        <Link href="/mypage" className="font-medium hover:text-gray-900">
+      <div className="flex items-center gap-1 text-[12px] text-gray-700 md:gap-3 md:text-[13px]">
+        <Link
+          href="/mypage"
+          className="px-1 py-1.5 transition hover:text-black font-medium"
+        >
           마이페이지
         </Link>
         <span className="h-4 w-px bg-gray-200" />
-        <button onClick={handleLogout} className="hover:text-gray-900">
+        <button
+          onClick={handleLogout}
+          className="px-1 py-1.5 transition hover:text-black"
+        >
           로그아웃
         </button>
       </div>
@@ -40,10 +46,10 @@ export function UserMenu() {
   }
 
   return (
-    <div className="flex items-center gap-1 text-[12px] md:gap-3 md:text-[13px]">
+    <div className="flex items-center gap-1 text-[12px] text-gray-700 md:gap-3 md:text-[13px]">
       <Link
         href="/login"
-        className={`rounded-md px-1 py-1.5 text-gray-700 transition hover:text-black ${hideDesktopLoginOnHome ? "lg:hidden" : ""}`}
+        className={`px-1 py-1.5 transition hover:text-black font-medium ${hideDesktopLoginOnHome ? "lg:hidden" : ""}`}
       >
         로그인
       </Link>
@@ -52,7 +58,7 @@ export function UserMenu() {
 
       <Link
         href="/signup"
-        className="rounded-md px-1 py-1.5 text-gray-700 transition hover:text-black"
+        className="px-1 py-1.5 transition hover:text-black"
       >
         회원가입
       </Link>

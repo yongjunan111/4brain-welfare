@@ -15,9 +15,10 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.http import HttpResponseRedirect, JsonResponse
 from django.conf import settings
+from django.views.static import serve
 from django.db import connection
 from accounts.views import GoogleLogin, FindUsernameView, PasswordResetConfirmRedirectView, AxesLockedLoginView, CustomPasswordResetView, clean_logout, DisabledPasswordChangeView
 
@@ -61,7 +62,10 @@ urlpatterns = [
     path('api/v1/chat/', include('chat.urls')),  # [BRAIN4-20] Chat API
 ]
 
-# 개발 환경: media 파일 서빙 (운영에서는 Nginx/CDN 사용)
-if settings.DEBUG:
-    from django.conf.urls.static import static
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Docker/Gunicorn 환경에서도 admin static/media를 Django에서 직접 서빙한다.
+# NOTE: django.conf.urls.static.static()은 DEBUG=False일 때 빈 리스트를 반환하므로
+# re_path + serve를 사용해 명시적으로 라우팅한다.
+urlpatterns += [
+    re_path(r"^static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
+    re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}),
+]

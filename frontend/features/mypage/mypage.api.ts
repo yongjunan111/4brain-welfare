@@ -46,7 +46,12 @@ function getStoredAvatarUrl(): string | null {
 
 export function saveLocalAvatarUrl(avatarUrl: string): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(AVATAR_KEY, avatarUrl);
+    try {
+        localStorage.setItem(AVATAR_KEY, avatarUrl);
+    } catch (error) {
+        // Base64 이미지가 큰 경우 localStorage quota 초과 가능
+        console.warn("saveLocalAvatarUrl skipped:", error);
+    }
 }
 
 export function clearLocalAvatarUrl(): void {
@@ -92,12 +97,13 @@ function toBackendPreferences(frontend: MyProfile): Partial<BackendProfile> {
     return {
         birth_year: frontend.birthYear,
         district: frontend.district,
-        income_level: frontend.incomeLevel || undefined,
+        // 빈 문자열("")도 의도적 초기화 값이므로 그대로 전달
+        income_level: frontend.incomeLevel,
         income_amount: frontend.incomeAmount,
-        job_status: frontend.jobStatus || undefined,
-        education_status: frontend.educationStatus || undefined,
-        marriage_status: frontend.marriageStatus || undefined,
-        housing_type: frontend.housingType || undefined,
+        job_status: frontend.jobStatus,
+        education_status: frontend.educationStatus,
+        marriage_status: frontend.marriageStatus,
+        housing_type: frontend.housingType,
         household_size: frontend.householdSize,
         has_children: frontend.hasChildren,
         children_ages: frontend.childrenAges,
