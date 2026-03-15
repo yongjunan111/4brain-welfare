@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { fetchPolicies } from "./policy.api";
 import { Policy, PolicyCategory } from "./policy.types";
 import { PolicyCard } from "./PolicyCard";
@@ -20,12 +20,15 @@ import {
 // ─── 컴포넌트 ──────────────────────────────────────────────────────
 
 export function PolicySearchPageClient() {
+    const router = useRouter();
+    const pathname = usePathname();
     const searchParams = useSearchParams();
 
     // URL 파라미터로 초기 상태 설정
     const initialQ = searchParams.get("q") || "";
     const initialCategory = (searchParams.get("category") as PolicyCategory | "all") || "all";
     const initialApplyStatus = searchParams.get("apply_status") || "";
+    const initialPage = Math.max(1, Number(searchParams.get("page") || "1"));
 
     // 기본 필터
     const [q, setQ] = useState(initialQ);
@@ -47,7 +50,7 @@ export function PolicySearchPageClient() {
     const [applyStatus, setApplyStatus] = useState(initialApplyStatus);
 
     // 페이지네이션
-    const [page, setPage] = useState(1);
+    const [page, setPage] = useState(initialPage);
     const [pageSize, setPageSize] = useState(12);
     const [items, setItems] = useState<Policy[]>([]);
     const [totalCount, setTotalCount] = useState(0);
@@ -187,6 +190,29 @@ export function PolicySearchPageClient() {
 
         return () => { alive = false; };
     }, [q, category, region, page, pageSize, subcategory, employmentStatus, educationStatus, marriageStatus, age, applyStatus, specialConditions, ordering]);
+
+    // URL 쿼리에 현재 검색/페이지 상태 동기화 (뒤로가기 시 복원)
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const params = new URLSearchParams(window.location.search);
+
+        const setOrDelete = (key: string, value: string) => {
+            if (value) params.set(key, value);
+            else params.delete(key);
+        };
+
+        setOrDelete("q", q.trim());
+        setOrDelete("category", category === "all" ? "" : category);
+        setOrDelete("apply_status", applyStatus);
+        if (page > 1) params.set("page", String(page));
+        else params.delete("page");
+
+        const next = `${pathname}${params.toString() ? `?${params.toString()}` : ""}`;
+        const current = `${pathname}${window.location.search}`;
+        if (next !== current) {
+            router.replace(next, { scroll: false });
+        }
+    }, [router, pathname, q, category, applyStatus, page]);
 
     const countText = useMemo(() => {
         if (loading) return "불러오는 중...";

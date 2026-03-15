@@ -135,6 +135,46 @@ def _is_timeout_error(error_message: str | None) -> bool:
     )
 
 
+def _format_policy_markdown_response(
+    original_text: str,
+    policies: list[dict],
+    max_items: int = 4,
+) -> str:
+    """
+    Keep prompt untouched, but enforce final output to max_items policies on backend.
+    If structured policy list exists, build a stable markdown response from top N.
+    """
+    if not policies:
+        return original_text
+
+    top = policies[:max_items]
+    if len(policies) <= max_items:
+        return original_text
+
+    intro = "조건에 맞는 정책을 추려서 안내드릴게요."
+    if original_text:
+        first_line = next((line.strip() for line in original_text.splitlines() if line.strip()), "")
+        if first_line:
+            intro = first_line
+
+    lines: list[str] = [intro, "", f"총 **{len(top)}개** 정책입니다.", ""]
+    for idx, policy in enumerate(top, start=1):
+        title = policy.get("plcy_nm") or policy.get("title") or "정책명 없음"
+        category = policy.get("category") or "-"
+        summary = policy.get("summary") or policy.get("description") or "상세 설명 없음"
+        apply_url = policy.get("apply_url")
+
+        lines.append(f"### {idx}. {title}")
+        lines.append(f"- 카테고리: {category}")
+        lines.append(f"- 요약: {summary}")
+        if apply_url:
+            lines.append(f"- 신청 URL: [신청하기]({apply_url})")
+        lines.append("")
+
+    lines.append("더 필요하시면 조건을 추가로 알려주세요. 다음 추천도 이어서 도와드릴게요.")
+    return "\n".join(lines)
+
+
 class ChatSessionViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
     lookup_field = "id"
@@ -314,10 +354,70 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        assistant_content = result["response"].message
+        chat_response = result["response"]
+        assistant_content = chat_response.message
+        response_policies = []
+        for policy in getattr(chat_response, "policies", []) or []:
+            if hasattr(policy, "to_dict"):
+                response_policies.append(policy.to_dict())
+            elif isinstance(policy, dict):
+                response_policies.append(policy)
+
+        # LLM이 structured policies를 비워 보낸 경우, check_eligibility ToolMessage에서 복구한다.
+        if not response_policies:
+            eligibility_results: list[dict] = []
+            for msg in result.get("messages", []):
+                if getattr(msg, "type", "") == "tool" and getattr(msg, "name", "") == "check_eligibility":
+                    try:
+                        parsed = _json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+                        if isinstance(parsed, list):
+                            eligibility_results.extend(parsed)
+                    except Exception:
+                        continue
+
+            eligible = [p for p in eligibility_results if p.get("is_eligible") is True]
+            uncertain = [p for p in eligibility_results if p.get("is_eligible") is None]
+            candidates = eligible + uncertain
+
+            if candidates:
+                policy_ids = [p.get("policy_id") for p in candidates if p.get("policy_id")]
+                db_map = {p["policy_id"]: p for p in _fetch_policies_for_agent(policy_ids)}
+                today = _date.today()
+                for item in candidates:
+                    policy_id = item.get("policy_id", "")
+                    db = db_map.get(policy_id, {})
+                    deadline_str = db.get("apply_end_date")
+                    dday = None
+                    if deadline_str:
+                        try:
+                            dday = (_date.fromisoformat(str(deadline_str)) - today).days
+                        except (ValueError, TypeError):
+                            dday = None
+
+                    response_policies.append(
+                        {
+                            "plcy_no": policy_id,
+                            "plcy_nm": item.get("title") or db.get("title", ""),
+                            "category": db.get("category", ""),
+                            "summary": db.get("description") or db.get("support_content", ""),
+                            "eligibility": "eligible" if item.get("is_eligible") is True else "uncertain",
+                            "ineligible_reasons": item.get("reasons", []),
+                            "deadline": str(deadline_str) if deadline_str else None,
+                            "dday": dday,
+                            "apply_url": db.get("apply_url"),
+                            "detail_url": None,
+                        }
+                    )
+
+        assistant_content = _format_policy_markdown_response(
+            assistant_content,
+            response_policies,
+            max_items=4,
+        )
+
         metadata = {
             "tool_calls": result.get("tool_calls", []),
-            "policies": [p.to_dict() for p in result["response"].policies],
+            "policies": response_policies,
         }
 
         with transaction.atomic():
