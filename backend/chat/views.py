@@ -313,59 +313,8 @@ class ChatSessionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        chat_response = result["response"]
-        assistant_content = chat_response.message
-
-        # check_eligibility ToolMessage에서 정책 카드 추출
-        # (LLM 최종 텍스트는 마크다운이라 ChatResponse.policies가 항상 [])
-        eligibility_results: list[dict] = []
-        for msg in result.get("messages", []):
-            if getattr(msg, "type", "") == "tool" and getattr(msg, "name", "") == "check_eligibility":
-                try:
-                    parsed = _json.loads(msg.content) if isinstance(msg.content, str) else msg.content
-                    if isinstance(parsed, list):
-                        eligibility_results.extend(parsed)
-                except Exception:
-                    pass
-
-        # 적격(True) 우선, 불확실(None) 보완, 최대 5개
-        eligible = [p for p in eligibility_results if p.get("is_eligible") is True][:5]
-        if len(eligible) < 5:
-            uncertain = [p for p in eligibility_results if p.get("is_eligible") is None][: 5 - len(eligible)]
-            eligible = eligible + uncertain
-
-        policy_cards: list[dict] = []
-        if eligible:
-            policy_ids = [p["policy_id"] for p in eligible if p.get("policy_id")]
-            db_map = {p["policy_id"]: p for p in _fetch_policies_for_agent(policy_ids)}
-            today = _date.today()
-            for p in eligible:
-                pid = p.get("policy_id", "")
-                db = db_map.get(pid, {})
-                deadline_str = db.get("apply_end_date")
-                dday = None
-                if deadline_str:
-                    try:
-                        dday = (_date.fromisoformat(str(deadline_str)) - today).days
-                    except (ValueError, TypeError):
-                        pass
-                policy_cards.append({
-                    "plcy_no": pid,
-                    "plcy_nm": p.get("title") or db.get("title", ""),
-                    "category": db.get("category", ""),
-                    "summary": db.get("description") or db.get("support_content", ""),
-                    "eligibility": "eligible" if p.get("is_eligible") is True else "uncertain",
-                    "ineligible_reasons": p.get("reasons", []),
-                    "deadline": str(deadline_str) if deadline_str else None,
-                    "dday": dday,
-                    "apply_url": db.get("apply_url"),
-                    "detail_url": None,
-                })
-
-        metadata = {
-            "tool_calls": result.get("tool_calls", []),
-            "policies": policy_cards,
-        }
+        assistant_content = result["response"].message
+        metadata = {"tool_calls": result.get("tool_calls", [])}
 
         with transaction.atomic():
             user_message = ChatMessage.objects.create(
