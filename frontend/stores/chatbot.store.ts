@@ -124,7 +124,7 @@ export const useChatbotStore = create<ChatbotState>()(
           if (!sessionId) return;
 
           const tempUserMsg: ChatMessage = {
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2),
             role: "user",
             content,
             createdAt: Date.now(),
