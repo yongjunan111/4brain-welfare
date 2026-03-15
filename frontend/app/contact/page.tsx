@@ -99,16 +99,16 @@ export default function ContactPage() {
       <h1 className="mb-4 text-2xl font-bold text-gray-900">오시는길</h1>
       <p className="mb-6 text-sm text-gray-700">{CAMPUS.address}</p>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 lg:col-span-3">
-          {loading && <div className="p-8 text-center text-sm text-gray-500">지도를 불러오는 중입니다.</div>}
+      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-5">
+        <div className="h-[420px] overflow-hidden rounded-xl border border-gray-200 bg-gray-50 lg:col-span-3 lg:h-full">
+          {loading && <div className="grid h-full place-items-center p-8 text-center text-sm text-gray-500">지도를 불러오는 중입니다.</div>}
           {error && (
-            <div className="p-8 text-center text-sm text-red-500">
+            <div className="grid h-full place-items-center p-8 text-center text-sm text-red-500">
               카카오 지도를 불러오지 못했습니다. 지도 키 설정을 확인해주세요.
             </div>
           )}
           {!loading && !error && (
-            <Map center={center} level={3} style={{ width: "100%", height: "420px" }}>
+            <Map center={center} level={3} style={{ width: "100%", height: "100%" }}>
               <MapMarker position={center} title={CAMPUS.name} />
             </Map>
           )}
