@@ -1,12 +1,12 @@
-// features/chatbot/ChatMessage.tsx
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { ChatMessage } from "./chatbot.types";
+
 import { PolicyCardItem } from "./PolicyCard";
+import type { ChatMessage } from "./chatbot.types";
 
 function PolicyCarousel({ policies }: { policies: NonNullable<ChatMessage["policies"]> }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -19,18 +19,19 @@ function PolicyCarousel({ policies }: { policies: NonNullable<ChatMessage["polic
 
     const updateCardsPerView = () => {
       const width = element.clientWidth;
-      // 기본 플로팅 창(약 420px)은 1개, 넓은 영역에서는 2개
       setCardsPerView(width >= 680 ? 2 : 1);
     };
 
     updateCardsPerView();
     const observer = new ResizeObserver(updateCardsPerView);
     observer.observe(element);
+
     return () => observer.disconnect();
   }, []);
 
   const totalPages = Math.max(1, Math.ceil(policies.length / cardsPerView));
   const safePageIndex = Math.min(pageIndex, totalPages - 1);
+
   const visiblePolicies = useMemo(() => {
     const start = safePageIndex * cardsPerView;
     return policies.slice(start, start + cardsPerView);
@@ -49,6 +50,7 @@ function PolicyCarousel({ policies }: { policies: NonNullable<ChatMessage["polic
           <PolicyCardItem key={policy.plcy_no || policy.plcy_nm} policy={policy} />
         ))}
       </div>
+
       {totalPages > 1 && (
         <div className="mt-2 flex items-center justify-end gap-2">
           <button
@@ -60,9 +62,11 @@ function PolicyCarousel({ policies }: { policies: NonNullable<ChatMessage["polic
           >
             ←
           </button>
+
           <span className="min-w-[52px] text-center text-xs text-gray-500">
             {safePageIndex + 1} / {totalPages}
           </span>
+
           <button
             type="button"
             onClick={() => setPageIndex((prev) => Math.min(totalPages - 1, prev + 1))}
@@ -93,11 +97,12 @@ export function ChatMessageBubble({ message }: { message: ChatMessage }) {
           className="h-11 w-11 shrink-0 p-1"
         />
       )}
-      <div className={`flex flex-col gap-3 ${isUser ? "items-end max-w-[80%]" : "flex-1 min-w-0"}`}>
+
+      <div className={`flex flex-col gap-3 ${isUser ? "max-w-[80%] items-end" : "min-w-0 flex-1"}`}>
         <div
           className={[
             "rounded-2xl px-3 py-2 text-[15px] leading-relaxed",
-            isUser ? "bg-blue-800 text-white" : "bg-gray-100 text-gray-900 w-full",
+            isUser ? "bg-blue-800 text-white" : "w-full bg-gray-100 text-gray-900",
           ].join(" ")}
         >
           {isUser ? (
@@ -107,12 +112,7 @@ export function ChatMessageBubble({ message }: { message: ChatMessage }) {
               remarkPlugins={[remarkGfm]}
               components={{
                 a: ({ ...props }) => (
-                  <a
-                    {...props}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-700 underline"
-                  />
+                  <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline" />
                 ),
               }}
             >
