@@ -79,8 +79,7 @@ def _eligible_row(**overrides):
     row = {
         "policy_id": "R001",
         "title": "기본 정책",
-        "description": "",
-        "support_content": "",
+        "summary": "",
         "category": "",
         "apply_end_date": None,
         "is_eligible": True,
@@ -555,7 +554,7 @@ class TestRankPolicies:
 
     def test_priority_score_key_is_included(self):
         ranked = _rank(
-            [_eligible_row(policy_id="MONEY", title="지원 정책", support_content="월 20만원 지원금")],
+            [_eligible_row(policy_id="MONEY", title="지원 정책", summary="월 20만원 지원금")],
             {},
         )
 
