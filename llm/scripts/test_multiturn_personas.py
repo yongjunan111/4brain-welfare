@@ -154,6 +154,35 @@ PERSONA_SCOPE_CHILD = {
     ],
 }
 
+# ── BRAIN4-73 페르소나: 27살 관악구 취준생 김유진 (모드 종합 커버리지) ──────────
+# 검증: matching / explore / faq / compare / chitchat 5가지 모드 전부 커버
+# turn1: [matching]  — 자기소개 → extract_info + 주거·취업 통합 매칭
+# turn2: [explore]   — 취업 정책 카테고리 탐색
+# turn3: [faq]       — 특정 정책(청년도약계좌) 상세 질문
+# turn4: [compare]   — 두 정책 비교 (청년월세지원 vs 청년전세자금대출)
+# turn5: [matching]  — 소득 추가 후 재매칭 → 더 정확한 적격 판정
+# turn6: [chitchat]  — 잡담, 도구 호출 없어야 함
+PERSONA_YUJIN = {
+    "label": "[BRAIN4-73] 27살 관악구 취준생 김유진 (모드 종합)",
+    "tid": "yujin",
+    "reask_check_from": 1,   # turn1 이후부터 나이·지역 재질문 없어야 함
+    "scope_guard_check": False,
+    "turns": [
+        # turn1 [matching] — 나이·지역·상황 한 번에 제공, 즉시 매칭 기대
+        "안녕! 나 27살 관악구 살고 있는 취준생 김유진이야. 지금 월세 50만원 내고 있는데 좀 빠듯해. 받을 수 있는 지원 있어?",
+        # turn2 [explore] — 주거 이외 취업 카테고리 탐색
+        "취업 관련 지원은 어떤 게 있어? 막 취업 준비 중이라 뭐가 있는지 탐색해보고 싶어",
+        # turn3 [faq] — 청년도약계좌 자격요건 상세 질문
+        "청년도약계좌가 뭔지 설명해줘. 내가 지금 취준생인데 가입할 수 있는 거야?",
+        # turn4 [compare] — 두 주거 지원 정책 비교
+        "청년월세지원이랑 청년전세자금대출 두 개 비교해줘. 나한테 뭐가 더 나을 것 같아?",
+        # turn5 [matching] — 소득 정보 추가 후 재매칭
+        "참고로 작년에 아르바이트 해서 연 소득이 1200만원 정도야. 이 정보 추가해서 내가 받을 수 있는 거 다시 알려줘",
+        # turn6 [chitchat] — 잡담, 도구 호출 없어야 함
+        "고마워! 근데 복지나침반 말고 주변에 직접 상담할 수 있는 곳 있어?",
+    ],
+}
+
 ALL_PERSONAS = [
     PERSONA_OVER_AGE,
     PERSONA_INFO_UPDATE,
@@ -162,6 +191,7 @@ ALL_PERSONAS = [
     PERSONA_GRADUAL,
     PERSONA_SCOPE_ADULT,
     PERSONA_SCOPE_CHILD,
+    PERSONA_YUJIN,
 ]
 
 # 나이/지역을 직접 묻는 패턴만 re-ask로 판정 (false positive 최소화)
