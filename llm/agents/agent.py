@@ -371,7 +371,7 @@ def _extract_policies_from_messages(
                     policies.append(PolicyResult.from_dict(mapped, today=today))
                 except (ValueError, TypeError):
                     pass
-            return policies
+            return [p for p in policies if p.eligibility != "ineligible"]
 
     if search_content is not None:
         try:
