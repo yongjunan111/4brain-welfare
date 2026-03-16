@@ -29,8 +29,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from .schemas import ChatResponse, PolicyResult
 from .tools import create_tools
 from .tools.check_eligibility import PolicyFetcher, YOUTH_AGE_MIN_BOUNDARY, YOUTH_AGE_MAX_BOUNDARY
-
-ORCHESTRATOR_MODEL = os.getenv("ORCHESTRATOR_MODEL", "gpt-4.1-mini")
 from .prompts.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT, ORCHESTRATOR_SYSTEM_PROMPT_SHORT
 from .user_session import (
     _current_thread_id,
@@ -40,6 +38,8 @@ from .user_session import (
     clear_user_info,
 )
 from ..services import get_langfuse_handler, langfuse_session
+
+ORCHESTRATOR_MODEL = os.getenv("ORCHESTRATOR_MODEL", "gpt-4.1-mini")
 
 # user_session re-export: 외부 모듈(backend 등)이 agent.py를 통해 접근하던 기존 import 경로 유지
 __all__ = [
