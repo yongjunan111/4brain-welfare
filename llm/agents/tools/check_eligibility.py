@@ -350,13 +350,13 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
     """policy_fetcher를 주입받아 check_eligibility 도구를 생성한다."""
 
     @tool
-    def check_eligibility(policies: str, user_info: str) -> str:
+    def check_eligibility(policies: str, user_info: str = "") -> str:
         """
         검색된 정책에 대해 사용자 자격요건을 룰베이스로 판정한다.
 
         Args:
-            policies: search_policies 결과 JSON 문자열 또는 "all"/"all_policies"
-            user_info: extract_info 결과 JSON 문자열 (사용자 정보 dict)
+            policies: search_policies 결과 JSON 문자열
+            user_info: 사용자 정보 JSON 문자열 (생략 가능 — 생략 시 세션 store에서 자동 주입)
 
         Returns:
             판정 결과 JSON 문자열 (정책별 is_eligible + reasons + details)
@@ -379,16 +379,20 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
                     ensure_ascii=False,
                 )
 
-        try:
-            info = json.loads(user_info)
-        except (json.JSONDecodeError, TypeError) as exc:
-            return json.dumps(
-                {
-                    "error": f"user_info 파싱 실패: {str(exc)}",
-                    "policies_checked": 0,
-                },
-                ensure_ascii=False,
-            )
+        # user_info 미전달 시 store에서 자동 주입
+        if not user_info and thread_id:
+            info = get_user_info(thread_id)
+        else:
+            try:
+                info = json.loads(user_info)
+            except (json.JSONDecodeError, TypeError) as exc:
+                return json.dumps(
+                    {
+                        "error": f"user_info 파싱 실패: {str(exc)}",
+                        "policies_checked": 0,
+                    },
+                    ensure_ascii=False,
+                )
 
         if not isinstance(info, dict):
             return json.dumps(
