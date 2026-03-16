@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import sys
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -32,6 +33,70 @@ from .prompts.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT, ORCHESTRATOR_SYSTE
 from ..services import get_langfuse_handler, langfuse_session
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# user_info 영속 store (멀티턴 사용자 정보 유지)
+# ============================================================================
+
+_user_info_store: dict[str, dict] = {}
+_user_info_store_lock = threading.Lock()
+_current_thread_id = threading.local()  # prompt callable에서 thread_id 접근 — run_agent()에서 세팅
+
+_USER_INFO_LABEL = {
+    "age": "나이",
+    "district": "거주지",
+    "employment_status": "취업상태",
+    "income_level": "연소득(만원)",
+    "housing_type": "주거형태",
+    "household_size": "가구원수",
+}
+
+
+def merge_user_info(thread_id: str, new_info: dict) -> None:
+    """extract_info 결과를 store에 누적. None은 기존값을 유지한다."""
+    with _user_info_store_lock:
+        existing = _user_info_store.setdefault(thread_id, {})
+        for k, v in new_info.items():
+            if v is not None:
+                existing[k] = v
+    logger.debug("[merge_user_info] thread_id=%r store=%r", thread_id, get_user_info(thread_id))
+
+
+def get_user_info(thread_id: str) -> dict:
+    with _user_info_store_lock:
+        return dict(_user_info_store.get(thread_id, {}))
+
+
+def clear_user_info(thread_id: str) -> None:
+    with _user_info_store_lock:
+        _user_info_store.pop(thread_id, None)
+
+
+def _make_prompt_fn(system_prompt_base: str):
+    """LangGraph 1.x: callable receives StateSchema dict, must return full message list."""
+    def fn(state: dict) -> list:
+        thread_id = getattr(_current_thread_id, "value", "") or ""
+        info = get_user_info(thread_id)
+        existing_messages = list(state.get("messages", []))
+        # income_raw는 내부 계산용 — 프롬프트 노출 제외
+        displayable = {k: v for k, v in info.items() if v is not None and k != "income_raw"}
+        if not displayable:
+            logger.debug("[prompt_fn] thread_id=%r store=empty → 기본 프롬프트", thread_id)
+            return [SystemMessage(content=system_prompt_base)] + existing_messages
+        lines = [f"- {_USER_INFO_LABEL.get(k, k)}: {v}" for k, v in displayable.items()]
+        injected = (
+            system_prompt_base
+            + "\n\n[현재 파악된 사용자 정보]\n"
+            + "\n".join(lines)
+            + "\n이 정보는 이미 확인된 것이므로:"
+            + "\n- 사용자에게 다시 묻지 마세요."
+            + "\n- 사용자가 새 정보를 제공하거나 기존 정보를 수정할 때만 extract_info를 호출하세요. 그 외에는 재호출하지 마세요."
+            + "\n- 이미 파악된 정보로 바로 search_policies 또는 check_eligibility로 진행하세요."
+        )
+        logger.debug("[prompt_fn] thread_id=%r 주입: %s", thread_id, lines)
+        return [SystemMessage(content=injected)] + existing_messages
+    return fn
 
 
 # ============================================================================
@@ -93,7 +158,7 @@ def create_agent(
     agent = create_react_agent(
         model=llm,
         tools=tools,
-        prompt=SystemMessage(content=system_prompt),
+        prompt=_make_prompt_fn(system_prompt),
         checkpointer=checkpointer,
     )
     setattr(agent, "_max_iterations", max_iterations)
@@ -169,7 +234,7 @@ async def create_agent_with_mcp(
     agent = create_react_agent(
         model=llm,
         tools=tools,
-        prompt=SystemMessage(content=system_prompt),
+        prompt=_make_prompt_fn(system_prompt),
         checkpointer=checkpointer,
     )
 
@@ -312,6 +377,18 @@ def _extract_policies_from_messages(
     return None
 
 
+_POLICY_TOOL_NAMES = {"search_policies", "check_eligibility"}
+
+
+def _had_policy_tool_calls(messages: list) -> bool:
+    """현재 턴 메시지에 search_policies 또는 check_eligibility ToolMessage가 있는지 확인."""
+    return any(
+        getattr(msg, "type", "") == "tool"
+        and getattr(msg, "name", "") in _POLICY_TOOL_NAMES
+        for msg in messages
+    )
+
+
 def _strip_json_code_fence(raw_text: str) -> str:
     stripped = raw_text.strip()
     if not stripped.startswith("```"):
@@ -347,7 +424,6 @@ def _parse_chat_response(raw_text: str) -> tuple[ChatResponse, bool]:
             except (ValueError, TypeError):
                 continue
 
-    logger.warning("parse_chat_response fallback. raw_text_preview=%r", raw_text[:300])
     return ChatResponse(message=raw_text, policies=[], follow_up=None), False
 
 
@@ -389,16 +465,50 @@ def run_agent(
 
     # 입력 메시지
     inputs = {"messages": [HumanMessage(content=message)]}
-    
+
     try:
-        # 실행
-        with langfuse_session(session_id=thread_id):
-            result = agent.invoke(inputs, config=config)
+        # thread_local에 thread_id 세팅 — prompt callable이 store 조회에 사용
+        _current_thread_id.value = thread_id
+        try:
+            # 실행
+            with langfuse_session(session_id=thread_id):
+                result = agent.invoke(inputs, config=config)
+        finally:
+            _current_thread_id.value = ""
 
         # 결과 파싱
         messages = result.get("messages", [])
+
+        # 현재 턴 extract_info ToolMessage 파싱 → store 누적
+        # checkpointer가 있으면 result["messages"]에 전체 히스토리가 담기므로
+        # 마지막 HumanMessage 이후 메시지만 처리 (현재 턴 신규 메시지만)
+        last_human_idx = -1
+        for i, msg in enumerate(messages):
+            if getattr(msg, "type", "") == "human":
+                last_human_idx = i
+        for msg in messages[last_human_idx + 1:]:
+            if getattr(msg, "type", "") == "tool" and getattr(msg, "name", "") == "extract_info":
+                try:
+                    extracted = json.loads(msg.content)
+                    if isinstance(extracted, dict):
+                        merge_user_info(thread_id, extracted)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
         raw_text = _extract_final_ai_text(messages)
         response, parsed_ok = _parse_chat_response(raw_text)
+
+        if not parsed_ok:
+            if _had_policy_tool_calls(messages):
+                # 정책 검색은 실행됐는데 LLM이 JSON 대신 평문으로 응답 — 진짜 포맷 이탈
+                logger.warning(
+                    "tool_called_but_unparsed. raw_text_preview=%r", raw_text[:300]
+                )
+            else:
+                # 비정책 대화 턴 (인사·안내·clarification) — 평문 응답이 정상 동작
+                logger.debug(
+                    "text_only_response. raw_text_preview=%r", raw_text[:300]
+                )
 
         # ToolMessage 기반 policies 추출 (LLM JSON 파싱 대신 항상 도구 결과 사용)
         extracted_policies = _extract_policies_from_messages(messages)
