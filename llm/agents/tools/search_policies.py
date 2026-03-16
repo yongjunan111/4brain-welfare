@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -14,14 +15,20 @@ from llm.agents.user_session import get_user_info, _current_thread_id
 logger = logging.getLogger(__name__)
 
 
-def _get_out_of_scope_message(age: int) -> str | None:
-    """나이가 서비스 범위 밖이면 거절 메시지 반환, 범위 내면 None."""
+def _get_out_of_scope_sentinel(age: int) -> str | None:
+    """나이가 서비스 범위 밖이면 scope_blocked JSON sentinel 반환, 범위 내면 None."""
     if age < YOUTH_AGE_MIN_BOUNDARY or age > YOUTH_AGE_MAX_BOUNDARY:
-        return (
-            f"[서비스 범위 초과] 나이 {age}세는 복지나침반 대상"
-            f"({YOUTH_AGE_MIN_BOUNDARY}~{YOUTH_AGE_MAX_BOUNDARY}세)이 아닙니다. "
-            "정책 검색을 실행하지 않습니다. "
-            "복지로(bokjiro.go.kr), 정부24(gov.kr), 129 복지상담전화를 안내하세요."
+        return json.dumps(
+            {
+                "scope_blocked": True,
+                "message": (
+                    f"나이 {age}세는 복지나침반 대상"
+                    f"({YOUTH_AGE_MIN_BOUNDARY}~{YOUTH_AGE_MAX_BOUNDARY}세)이 아닙니다. "
+                    "복지로(bokjiro.go.kr), 정부24(gov.kr), 129 복지상담전화를 안내하세요."
+                ),
+                "policies": [],
+            },
+            ensure_ascii=False,
         )
     return None
 
@@ -91,9 +98,9 @@ def search_policies(
     if thread_id:
         age = get_user_info(thread_id).get("age")
         if isinstance(age, int):
-            msg = _get_out_of_scope_message(age)
-            if msg:
-                return msg
+            sentinel = _get_out_of_scope_sentinel(age)
+            if sentinel:
+                return sentinel
 
     normalized_top_k = normalize_top_k(top_k)
     backend = get_search_backend()

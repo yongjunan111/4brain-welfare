@@ -371,6 +371,14 @@ def _extract_policies_from_messages(
                     pass
             return policies
 
+    if search_content is not None:
+        try:
+            _sd = json.loads(search_content)
+        except (json.JSONDecodeError, TypeError):
+            _sd = None
+        if isinstance(_sd, dict) and _sd.get("scope_blocked"):
+            return []
+
     if search_content is not None and search_content not in (
         "검색 결과 없음",
         "검색 중 오류가 발생했습니다",
