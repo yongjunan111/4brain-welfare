@@ -436,6 +436,8 @@ def _extract_with_llm(
     system_prompt = (
         EXTRACT_INFO_SYSTEM_PROMPT_SHORT if use_short_prompt else EXTRACT_INFO_SYSTEM_PROMPT
     )
+    current_year = datetime.now().year
+    system_prompt = f"현재 연도: {current_year}년\n\n{system_prompt}"
 
     response = llm.invoke(
         [
@@ -501,7 +503,12 @@ def _parse_json_response(raw_response: str) -> ExtractResult:
         result = _empty_result()
 
         raw_age = payload.get("age")
-        result["age"] = raw_age if isinstance(raw_age, int) and not isinstance(raw_age, bool) else None
+        if isinstance(raw_age, bool):
+            result["age"] = None
+        elif isinstance(raw_age, (int, str)):
+            result["age"] = raw_age
+        else:
+            result["age"] = None
 
         # district 우선, residence는 하위호환 fallback
         raw_district = payload.get("district") if "district" in payload else payload.get("residence")
