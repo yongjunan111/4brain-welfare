@@ -14,6 +14,14 @@ _user_info_store: dict[str, dict] = {}
 _user_info_store_lock = threading.Lock()
 _current_thread_id = threading.local()  # run_agent()에서 세팅, tools에서 읽기
 
+# 서비스 범위 외 사용자에게 안내할 대안 서비스 (tools + 프롬프트 단일 출처)
+OUT_OF_SCOPE_SERVICES = "복지로(bokjiro.go.kr), 정부24(gov.kr), 129 복지상담전화"
+OUT_OF_SCOPE_SERVICES_BULLET = (
+    "   - 복지로(bokjiro.go.kr) — 전 연령 복지 정보 통합\n"
+    "   - 정부24(gov.kr) — 정부 지원 서비스 검색\n"
+    "   - 129 복지상담전화 — 보건복지부 상담 콜센터"
+)
+
 _USER_INFO_LABEL = {
     "age": "나이",
     "district": "거주지",

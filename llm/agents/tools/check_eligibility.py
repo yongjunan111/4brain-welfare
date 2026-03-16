@@ -12,7 +12,7 @@ from datetime import date, datetime
 from typing import Any, Callable, Optional
 
 from langchain_core.tools import BaseTool, tool
-from llm.agents.user_session import get_user_info, _current_thread_id
+from llm.agents.user_session import get_user_info, _current_thread_id, OUT_OF_SCOPE_SERVICES
 
 # 소득 코드 상수 (backend/policies/services/matching_keys.py와 동일 값 유지)
 INCOME_ANY = "0043001"
@@ -371,7 +371,7 @@ def create_check_eligibility(policy_fetcher: PolicyFetcher) -> BaseTool:
                         "message": (
                             f"나이 {age}세는 복지나침반 대상"
                             f"({YOUTH_AGE_MIN_BOUNDARY}~{YOUTH_AGE_MAX_BOUNDARY}세)이 아닙니다. "
-                            "복지로(bokjiro.go.kr), 정부24(gov.kr), 129 복지상담전화를 안내하세요."
+                            f"{OUT_OF_SCOPE_SERVICES}를 안내하세요."
                         ),
                         "policies": [],
                         "policies_checked": 0,

@@ -10,7 +10,7 @@ from langchain_core.tools import tool
 
 from .search_backend import DEFAULT_TOP_K, get_search_backend, normalize_top_k
 from .check_eligibility import YOUTH_AGE_MIN_BOUNDARY, YOUTH_AGE_MAX_BOUNDARY
-from llm.agents.user_session import get_user_info, _current_thread_id
+from llm.agents.user_session import get_user_info, _current_thread_id, OUT_OF_SCOPE_SERVICES
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def _get_out_of_scope_sentinel(age: int) -> str | None:
                 "message": (
                     f"나이 {age}세는 복지나침반 대상"
                     f"({YOUTH_AGE_MIN_BOUNDARY}~{YOUTH_AGE_MAX_BOUNDARY}세)이 아닙니다. "
-                    "복지로(bokjiro.go.kr), 정부24(gov.kr), 129 복지상담전화를 안내하세요."
+                    f"{OUT_OF_SCOPE_SERVICES}를 안내하세요."
                 ),
                 "policies": [],
             },

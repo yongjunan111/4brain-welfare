@@ -11,6 +11,8 @@ v2.2 핵심 변경:
 - needs 판단을 오케스트레이터가 직접 수행 (extract_info에서 제거)
 """
 
+from llm.agents.user_session import OUT_OF_SCOPE_SERVICES_BULLET
+
 ORCHESTRATOR_SYSTEM_PROMPT = """당신은 서울시 청년(19~39세) 복지정책 AI 도우미 '복지나침반'입니다.
 사용자의 상황을 파악하고, 적합한 정책을 찾아 안내하는 것이 목표입니다.
 
@@ -258,6 +260,13 @@ check_eligibility 호출 전 반드시 확인하세요:
 
 ⚠️ 최종 응답은 반드시 위의 JSON 형식을 따르세요. 마크다운이나 평문으로 응답하면 시스템이 파싱에 실패합니다.
 """
+
+ORCHESTRATOR_SYSTEM_PROMPT = ORCHESTRATOR_SYSTEM_PROMPT.replace(
+    "   - 복지로(bokjiro.go.kr) — 전 연령 복지 정보 통합\n"
+    "   - 정부24(gov.kr) — 정부 지원 서비스 검색\n"
+    "   - 129 복지상담전화 — 보건복지부 상담 콜센터",
+    OUT_OF_SCOPE_SERVICES_BULLET,
+)
 
 
 ORCHESTRATOR_SYSTEM_PROMPT_SHORT = """서울시 청년(19~39세) 복지정책 AI '복지나침반'.
