@@ -29,6 +29,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from .schemas import ChatResponse, PolicyResult
 from .tools import create_tools
 from .tools.check_eligibility import PolicyFetcher, YOUTH_AGE_MIN_BOUNDARY, YOUTH_AGE_MAX_BOUNDARY
+
+ORCHESTRATOR_MODEL = os.getenv("ORCHESTRATOR_MODEL", "gpt-4.1-mini")
 from .prompts.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT, ORCHESTRATOR_SYSTEM_PROMPT_SHORT
 from .user_session import (
     _current_thread_id,
@@ -115,7 +117,7 @@ def _read_timeout_seconds(default: int = 25) -> int:
 
 
 def create_agent(
-    model: str = "gpt-4o-mini",
+    model: str = ORCHESTRATOR_MODEL,
     temperature: float = 0,
     checkpointer: Optional[MemorySaver] = None,
     max_iterations: int = 5,
