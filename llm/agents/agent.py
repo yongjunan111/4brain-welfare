@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -79,14 +80,21 @@ def _make_prompt_fn(system_prompt_base: str):
         thread_id = getattr(_current_thread_id, "value", "") or ""
         info = get_user_info(thread_id)
         existing_messages = list(state.get("messages", []))
+
+        # 매 턴마다 현재 날짜 동적 주입 (요일 포함)
+        now = datetime.now()
+        weekday = ["월", "화", "수", "목", "금", "토", "일"][now.weekday()]
+        today_str = now.strftime("%Y-%m-%d")
+        base = f"오늘 날짜: {today_str} ({weekday}요일)\n\n{system_prompt_base}"
+
         # income_raw는 내부 계산용 — 프롬프트 노출 제외
         displayable = {k: v for k, v in info.items() if v is not None and k != "income_raw"}
         if not displayable:
             logger.debug("[prompt_fn] thread_id=%r store=empty → 기본 프롬프트", thread_id)
-            return [SystemMessage(content=system_prompt_base)] + existing_messages
+            return [SystemMessage(content=base)] + existing_messages
         lines = [f"- {_USER_INFO_LABEL.get(k, k)}: {v}" for k, v in displayable.items()]
         injected = (
-            system_prompt_base
+            base
             + "\n\n[현재 파악된 사용자 정보]\n"
             + "\n".join(lines)
             + "\n이 정보는 이미 확인된 것이므로:"
