@@ -6,10 +6,12 @@
 ![Django](https://img.shields.io/badge/Django-5.x-092E20?logo=django&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-ReAct_Agent-1C3C3C?logo=langchain&logoColor=white)
-![GPT-4o-mini](https://img.shields.io/badge/OpenAI-GPT--4o--mini-412991?logo=openai&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-API-412991?logo=openai&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-FF6F00)
 ![MCP](https://img.shields.io/badge/MCP-Model_Context_Protocol-blue)
+
+> **[Notion 프로젝트 문서](https://canyon-advantage-3a8.notion.site/Welfare-Compass-31b88193180e815ab542d78897bcdcc1?pvs=74)**
 
 ## 1. 프로젝트 소개
 
@@ -124,7 +126,7 @@
 ```mermaid
 flowchart LR
     U["User"] --> F["Frontend<br/>Next.js 16"]
-    F --> B["Backend API<br/>Django + DRF"]
+    F --> B["Backend API<br/>Django + Gunicorn"]
     B --> PG["PostgreSQL<br/>정책 원본 / 사용자 / 세션"]
     B --> ETL["ETL Command<br/>run_etl"]
     ETL --> Y["온통청년 API"]
@@ -133,13 +135,14 @@ flowchart LR
     A --> M["MCP Server"]
     M --> C["ChromaDB / Retriever"]
     M --> PG
+    A -.-> LF["LangFuse<br/>Observability"]
 ```
 
 ### 에이전트 파이프라인
 
 ```mermaid
 flowchart TD
-    Q["사용자 질문"] --> O["Orchestrator<br/>gpt-4o-mini"]
+    Q["사용자 질문"] --> O["Orchestrator<br/>gpt-4.1-mini"]
     O --> E["extract_info<br/>사용자 정보 추출"]
     O --> S["search_policies<br/>검색 + 리라이팅"]
     O --> K["check_eligibility<br/>룰베이스 자격 판정"]
@@ -170,73 +173,35 @@ flowchart LR
 
 | 영역 | 기술 | 선택 이유 |
 | --- | --- | --- |
-| Backend | Django 5, Django REST Framework | 정책, 회원, 세션, 관리자 기능이 필요한 서비스 구조에 적합하고 API 개발 속도가 빠름 |
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS | App Router 기반 UI 구성과 클라이언트 기능 확장에 유리함 |
+| Backend | Django 5, Django REST Framework, Gunicorn | 정책, 회원, 세션, 관리자 기능이 필요한 서비스 구조에 적합하고 API 개발 속도가 빠름 |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS, pnpm | App Router 기반 UI 구성과 클라이언트 기능 확장에 유리함 |
 | Agent | LangGraph (ReAct) | 질문 맥락에 따라 필요한 도구를 유연하게 선택할 수 있음 |
 | LLM | GPT-4o-mini | 비용 대비 응답 품질과 속도의 균형이 좋음 |
-| Retrieval | BM25 + Dense Retrieval + Reranker | 키워드 매칭과 의미 검색을 함께 활용해 검색 정확도를 높임 |
+| Retrieval | BM25 + Dense Retrieval + BGE Reranker | 키워드 매칭과 의미 검색을 함께 활용해 검색 정확도를 높임 |
 | Vector Store | ChromaDB | 로컬 개발과 프로토타이핑에 적합한 경량 벡터 저장소 |
 | Database | PostgreSQL 15 | 정책 원문과 서비스 데이터를 안정적으로 저장하는 Ground Truth 역할 |
 | MCP | Model Context Protocol | Agent와 검색 파이프라인을 느슨하게 분리해 확장성과 역할 분담을 확보 |
 | Tokenizer / Search | Kiwi, FlagEmbedding 계열 | 한국어 검색 품질 개선과 리랭킹 고도화에 활용 |
-| Observability | Langfuse (선택) | 프롬프트, 비용, 응답 흐름 추적을 위한 후보 스택 |
+| Observability | LangFuse | 프롬프트, 비용, 응답 흐름 추적. 환경변수 미설정 시 graceful degradation |
 
 ---
 
 ## 7. 성과 지표
 
-> 정량 수치는 실행 시점 기준 최신 값으로 업데이트하는 것을 권장합니다.
-
-| 지표 | 현재 기입 상태 |
+| 지표 | 수치 |
 | --- | --- |
-| 정책 데이터셋 규모 | `[최신 ETL 결과 기준으로 업데이트 예정]` |
-| 검색 품질 지표 | `[측정값 추가 예정]` |
-| 챗봇 응답 지연 | `[측정값 추가 예정]` |
-| 자격 판정 정확도 | 룰베이스 기반으로 설계, 수치 정리 예정 |
-| 운영 비용 | `[측정값 추가 예정]` |
-| 폼 기반 매칭 비용 | LLM 호출 없이 동작하도록 설계 |
+| 정책 데이터셋 규모 | 409개 정책 (온통청년 API 기준) |
+| 검색 latency | 1.3초 (싱글톤 캐싱 + 워밍업 적용 후, 적용 전 10.9초) |
+| 챗봇 응답 지연 | 첫 요청 ~36초, 이후 ~26초 (에이전트 오케스트레이션 포함) |
+| ToolMessage 최적화 | context -60%, latency -74% (경량화 적용 후) |
+| 자격 판정 | 룰베이스 기반, LLM 의존 없음 |
+| 폼 기반 매칭 비용 | LLM 호출 없이 동작 |
 
 ---
 
-## 8. 디렉터리 구조
+## 8. 로컬 세팅 가이드
 
-```text
-4brain-welfare/
-├── backend/
-│   ├── accounts/         # 회원, 인증, 프로필
-│   ├── chat/             # 채팅 세션/메시지 API
-│   ├── config/           # Django 설정
-│   ├── etl/              # 정책 수집/변환/적재
-│   ├── notifications/    # 알림 관련 앱
-│   └── policies/         # 정책 조회, 상세, 스크랩, 매칭
-├── frontend/
-│   ├── app/              # App Router 페이지
-│   ├── components/       # 공통 UI
-│   ├── constants/        # 상수 정의
-│   ├── features/         # 도메인별 기능 모듈
-│   ├── public/           # 정적 리소스
-│   ├── services/         # API / SSE 유틸
-│   └── stores/           # 상태 관리
-├── llm/
-│   ├── agents/           # ReAct Agent, prompts, tools, tests
-│   ├── embeddings/       # BM25, Dense, Reranker
-│   ├── evaluation/       # 검색 평가 스크립트
-│   ├── mcp/              # MCP 서버와 도구
-│   ├── prompts/          # 공용 프롬프트
-│   └── services/         # LLM 보조 서비스
-├── data/                 # 원천 데이터 / 검색 인덱스
-├── infra/                # 인프라 보조 compose 등
-├── scripts/              # 스크립트
-├── docker-compose.yaml
-├── pyproject.toml
-└── pytest.ini
-```
-
----
-
-## 9. 로컬 세팅 가이드
-
-### 9-1. 사전 요구사항
+### 8-1. 사전 요구사항
 
 - Python 3.10+
 - Node.js 20+ 권장
@@ -246,7 +211,7 @@ flowchart LR
 - 온통청년 API Key
 - `uv` (선택, MCP/LLM 모듈을 로컬 실행할 때 권장)
 
-### 9-2. 빠른 시작: Docker로 DB + Backend 실행
+### 8-2. 빠른 시작: Docker로 DB + Backend 실행
 
 가장 안전한 시작 방법은 DB와 Backend를 먼저 Docker로 올리고, Frontend는 로컬에서 실행하는 방식입니다.
 
@@ -268,6 +233,12 @@ Backend와 DB 실행:
 docker compose up --build db backend
 ```
 
+> **GPU 사용 시 (NVIDIA)**:
+> ```bash
+> export COMPOSE_FILE="docker-compose.yaml:docker-compose.gpu.yml"
+> docker compose up --build
+> ```
+
 > **기존 볼륨이 남아 있는 경우** (DB 유저 mismatch 등):
 > `docker compose down -v` 로 볼륨 초기화 후 다시 `up -d`
 
@@ -282,12 +253,12 @@ docker compose up --build db backend
 > `mcp` 서비스는 compose에 정의되어 있지만 GPU reservation 설정이 포함되어 있습니다.
 > 비-NVIDIA 환경에서는 별도 조정이 필요할 수 있으므로, 기본 가이드는 Backend 우선 실행 기준으로 정리합니다.
 
-### 9-3. Frontend 로컬 실행
+### 8-3. Frontend 로컬 실행
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 기본 접속 주소:
@@ -302,7 +273,7 @@ Google 로그인이나 Kakao Map 기능까지 함께 쓰려면 `frontend/.env.lo
 - `NEXT_PUBLIC_KAKAO_MAP_API_KEY`
 - `NEXT_PUBLIC_API_BASE_URL` (필요 시)
 
-### 9-4. Backend 로컬 실행
+### 8-4. Backend 로컬 실행
 
 로컬 Postgres를 직접 쓰거나, DB만 Docker로 띄운 뒤 Backend를 로컬에서 실행해도 됩니다.
 DB만 Docker로 띄우려면:
@@ -342,7 +313,7 @@ python manage.py run_etl
 python manage.py runserver
 ```
 
-### 9-5. MCP / LLM 로컬 실행
+### 8-5. MCP / LLM 로컬 실행
 
 LLM 검색 파이프라인과 MCP 서버를 별도로 검증하려면 루트에서 실행합니다.
 
@@ -357,12 +328,13 @@ uv run python -m llm.mcp.server
 ```env
 SEARCH_BACKEND=mcp
 MCP_HOST=127.0.0.1
+MCP_BIND_HOST=0.0.0.0
 MCP_PORT=8001
 ```
 
 ---
 
-## 10. 테스트
+## 9. 테스트
 
 ### Backend / ETL 테스트
 
@@ -390,7 +362,7 @@ pytest llm/agents/tests/test_orchestrator_integration.py -v -m integration_live
 
 ```bash
 cd frontend
-npm run lint
+pnpm lint
 npx tsc --noEmit
 ```
 
@@ -405,17 +377,17 @@ npx tsc --noEmit
 
 ---
 
-## 11. 팀 구성
+## 10. 팀 구성
 
 | 이름 | 역할 | 담당 |
 | --- | --- | --- |
-| 권은영 | Frontend | Next.js UI/UX, 정책 탐색 화면, 서비스 화면 흐름도 |
+| 권은영 | Project Lead / Fullstack | 프로젝트 리드, Next.js UI/UX, Django API |
 | 심유나 | LLM / Agent | LangGraph Agent, 프롬프트, 검색 파이프라인, 에이전트 파이프라인 |
-| 안준용 | Backend / Infra | Django API, DB, ETL, 인프라, 시스템 아키텍처, 데이터 흐름도 |
+| 안준용 | Backend / Infra | Django API, DB, ETL, Docker 인프라 |
 
 ---
 
-## 12. 트러블슈팅
+## 11. 트러블슈팅
 
 <details>
 <summary><b>rewrite_query를 독립 도구로 둘 때 검색 품질이 흔들리던 문제</b></summary>
@@ -448,7 +420,7 @@ npx tsc --noEmit
 
 ---
 
-## 13. ADR
+## 12. ADR
 
 <details>
 <summary><b>왜 ReAct Agent를 선택했는가?</b></summary>
@@ -476,4 +448,10 @@ MCP로 경계를 분리하면 검색 계층을 독립적으로 개선할 수 있
 
 ---
 
-## 14. 향후 계획
+## 13. 향후 계획
+
+- 멀티턴 대화 컨텍스트 누적 개선 (이전 턴 사용자 정보 재활용)
+- 에이전트 오케스트레이션 최적화 (검색형 질문 fast-path)
+- 스트리밍 응답 (SSE)
+- Celery 기반 비동기 작업 큐
+- GCP 배포
