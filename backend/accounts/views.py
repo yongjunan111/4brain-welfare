@@ -1,0 +1,751 @@
+from rest_framework import generics, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.shortcuts import get_object_or_404
+from django.http import HttpResponseRedirect # [추가] 리다이렉트를 위한 임포트
+from policies.models import Policy
+from .serializers import (
+    ProfileSerializer, ProfilePreferencesSerializer, ScrapSerializer
+)
+from .models import Profile, Scrap
+
+import os # [추가] 환경변수 접근용
+from django.conf import settings
+import logging
+from .permissions import IsReauthenticated, blacklist_reauth_token
+from django.core.signing import TimestampSigner
+from allauth.socialaccount.models import SocialAccount
+
+# Google Login Imports
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from dj_rest_auth.registration.views import SocialLoginView
+
+# [추가] 아이디 찾기를 위한 임포트
+from django.core.mail import send_mail
+
+
+# [추가] 계정 잠금 (dj-rest-auth LoginView 커스텀)
+from dj_rest_auth.views import LoginView as DjRestAuthLoginView
+from axes.models import AccessAttempt
+from django.utils import timezone
+from datetime import timedelta
+
+
+import json
+from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+import requests
+from dj_rest_auth.views import PasswordResetView # [추가] 부모 클래스 임포트
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def clean_logout(request):
+    """
+    쿠키 완전 삭제 로그아웃.
+    [주의] Python SimpleCookie는 쿠키 이름을 KEY로 쓰는 딕셔너리라,
+    같은 이름으로 delete_cookie를 두 번 호출하면 마지막 것이 앞 것을 덮어씀.
+    SIMPLE_JWT.AUTH_COOKIE_PATH='/'로 통일되어 있으므로 Path=/ 하나만 삭제하면 됨.
+    """
+    response = HttpResponse(
+        json.dumps({"detail": "로그아웃 되었습니다."}),
+        content_type='application/json',
+        status=200,
+    )
+
+    # access_token 삭제 (Path=/)
+    response.delete_cookie('access_token', path='/', samesite='Lax')
+
+    # refresh_token 삭제 (Path=/ — dj-rest-auth와 simplejwt 모두 이제 / 사용)
+    response.delete_cookie('refresh_token', path='/', samesite='Lax')
+
+    return response
+
+
+# urls.py에서 CleanLogoutView 대신 clean_logout 을 참조해야 함
+CleanLogoutView = clean_logout  # 하위 호환 alias
+
+
+class AxesLockedLoginView(DjRestAuthLoginView):
+    """
+    dj-rest-auth LoginView + 계정 잠금
+
+    dj-rest-auth의 LoginSerializer는 내부적으로 인증 실패를 처리(400)하므로,
+    django-axes의 인증 백엔드가 실패를 감지하지 못합니다.
+
+    이 뷰는 직접 AccessAttempt 테이블을 관리합니다:
+    1. 로그인 전: 잠금 상태 확인 → 잠김이면 403 반환
+    2. 로그인 실패 시: 실패 횟수 +1 기록 → 한도 도달 시 403 반환
+    3. 로그인 성공 시: 실패 기록 초기화
+    """
+
+    def _get_lockout_config(self):
+        cooloff = getattr(settings, 'AXES_COOLOFF_TIME', timedelta(minutes=5))
+        limit = getattr(settings, 'AXES_FAILURE_LIMIT', 5)
+        return cooloff, limit
+
+    def _is_locked(self, username):
+        """username이 잠금 상태인지 확인"""
+        cooloff, limit = self._get_lockout_config()
+        threshold = timezone.now() - cooloff
+        return AccessAttempt.objects.filter(
+            username=username,
+            failures_since_start__gte=limit,
+            attempt_time__gte=threshold,
+        ).exists()
+
+    def _record_failure(self, request, username):
+        """로그인 실패 기록"""
+        ip = self._get_client_ip(request)
+        attempt, created = AccessAttempt.objects.get_or_create(
+            username=username,
+            defaults={
+                'ip_address': ip,
+                'user_agent': request.META.get('HTTP_USER_AGENT', '')[:255],
+                'attempt_time': timezone.now(),
+                'failures_since_start': 1,
+            }
+        )
+        if not created:
+            attempt.failures_since_start += 1
+            attempt.attempt_time = timezone.now()
+            attempt.save(update_fields=['failures_since_start', 'attempt_time'])
+        return attempt.failures_since_start
+
+    def _reset_failures(self, username):
+        """로그인 성공 시 실패 기록 초기화"""
+        AccessAttempt.objects.filter(username=username).delete()
+
+    def _get_client_ip(self, request):
+        xff = request.META.get('HTTP_X_FORWARDED_FOR')
+        return xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR', '')
+
+    def post(self, request, *args, **kwargs):
+        username = request.data.get('username', '')
+
+        if username and self._is_locked(username):
+            return Response(
+                {"error": "로그인 시도가 너무 많습니다. 5분 후 다시 시도해주세요."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        response = super().post(request, *args, **kwargs)
+
+        if username:
+            if response.status_code == 400:
+                # 로그인 실패 → 실패 횟수 기록
+                _, limit = self._get_lockout_config()
+                failures = self._record_failure(request, username)
+                if failures >= limit:
+                    return Response(
+                        {"error": "로그인 시도가 너무 많습니다. 5분 후 다시 시도해주세요."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            elif response.status_code == 200:
+                # 로그인 성공 → 실패 기록 초기화
+                self._reset_failures(username)
+
+        return response
+
+class LeewayGoogleOAuth2Adapter(GoogleOAuth2Adapter):
+    """GoogleOAuth2Adapter + clock skew tolerance (leeway).
+
+    WSL2 등 가상 환경에서 호스트-게스트 간 시계 미세 차이로
+    ImmatureSignatureError(iat가 미래)가 간헐적으로 발생하는 것을 방지합니다.
+    """
+
+    def _decode_id_token(self, app, id_token):
+        import jwt as pyjwt
+        from allauth.socialaccount.providers.google.views import (
+            CERTS_URL, ID_TOKEN_ISSUER,
+        )
+        from allauth.socialaccount.internal import jwtkit
+        from allauth.socialaccount.providers.oauth2.client import OAuth2Error
+
+        verify_signature = not self.did_fetch_access_token
+        try:
+            if verify_signature:
+                alg, key = jwtkit.fetch_key(
+                    id_token, CERTS_URL, jwtkit.lookup_kid_pem_x509_certificate,
+                )
+                algorithms = [alg]
+            else:
+                key = ""
+                algorithms = None
+
+            data = pyjwt.decode(
+                id_token,
+                key=key,
+                options={
+                    "verify_signature": verify_signature,
+                    "verify_iss": True,
+                    "verify_aud": True,
+                    "verify_exp": True,
+                },
+                issuer=ID_TOKEN_ISSUER,
+                audience=app.client_id,
+                algorithms=algorithms,
+                leeway=10,  # 10초 clock skew 허용
+            )
+            jwtkit.verify_jti(data)
+            return data
+        except pyjwt.PyJWTError as e:
+            raise OAuth2Error("Invalid id_token") from e
+
+
+class GoogleLogin(SocialLoginView):
+    """
+    구글 로그인 API
+
+    프론트엔드에서 구글 로그인 후 받은 'code'를 이 API로 보내면,
+    백엔드가 구글과 통신하여 제 3자 인증을 완료하고 JWT 토큰을 발급합니다.
+    """
+    adapter_class = LeewayGoogleOAuth2Adapter
+    callback_url = "postmessage"
+    client_class = OAuth2Client
+
+
+# class SignupView(generics.CreateAPIView):
+#     """
+#     회원가입 API
+#     POST /api/accounts/signup/
+#     """
+#     queryset = User.objects.all()
+#     authentication_classes = [] # ✅ 만료된 토큰이 있어도 무시하고 진행 (401 방지)
+#     permission_classes = [AllowAny]
+#     serializer_class = UserSerializer
+#     
+#     def create(self, request, *args, **kwargs):
+#         serializer = self.get_serializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#         user = serializer.save()
+#         
+#         # 정책 알림 동의 정보를 Profile에 저장
+#         email_notification_enabled = request.data.get('email_notification_enabled', False)
+#         notification_email = request.data.get('notification_email', '')
+#         
+#         if email_notification_enabled:
+#             profile = user.profile  # Profile은 signal로 자동 생성됨
+#             profile.email_notification_enabled = True
+#             profile.notification_email = notification_email or user.email
+#             profile.save()
+#         
+#         return Response(
+#             {
+#                 "message": "회원가입이 완료되었습니다.",
+#                 "user": {
+#                     "username": user.username,
+#                     "email": user.email
+#                 }
+#             },
+#             status=status.HTTP_201_CREATED
+#         )
+
+
+class CheckUsernameView(generics.GenericAPIView):
+    """
+    아이디 중복 확인 API
+    GET /api/accounts/check-username/?username=xxx
+    
+    Returns:
+        - available: true/false
+        - message: 사용 가능 여부 메시지
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        username = request.query_params.get('username', '').strip()
+        
+        if not username:
+            return Response(
+                {"available": False, "message": "아이디를 입력해주세요."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 최소 길이 체크
+        if len(username) < 3:
+            return Response(
+                {"available": False, "message": "아이디는 3자 이상이어야 합니다."},
+                status=status.HTTP_200_OK
+            )
+        
+        # 중복 체크
+        if get_user_model().objects.filter(username=username).exists():
+            return Response(
+                {"available": False, "message": "이미 사용 중인 아이디입니다."},
+                status=status.HTTP_200_OK
+            )
+        
+        return Response(
+            {"available": True, "message": "사용 가능한 아이디입니다."},
+            status=status.HTTP_200_OK
+        )
+
+
+class ProfileView(APIView):
+    """
+    프로필 조회/수정 API
+    GET  /api/accounts/profile/ - 내 프로필 조회
+    PUT  /api/accounts/profile/ - 내 프로필 수정
+    PATCH /api/accounts/profile/ - 내 프로필 부분 수정
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        serializer = ProfileSerializer(profile)
+        # 소셜 로그인 사용자인 경우 등을 위해 패스워드 설정 여부(has_usable_password)를 포함
+        has_password = request.user.has_usable_password()
+        has_social_account = SocialAccount.objects.filter(user=request.user).exists()
+        data = serializer.data
+        data['has_password'] = has_password
+        data['has_social_account'] = has_social_account
+        return Response(data)
+
+    def put(self, request):
+        self.permission_classes = [IsAuthenticated]
+        self.check_permissions(request)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        serializer = ProfileSerializer(profile, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            token = request.headers.get('X-Reauth-Token')
+            if token:
+                blacklist_reauth_token(token)
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request):
+        """비민감 프로필 필드 수정 (정책 매칭 정보) - 재인증 불필요"""
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        serializer = ProfilePreferencesSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ScrapListView(generics.ListAPIView):
+    """내 스크랩 목록"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = ScrapSerializer
+    
+    def get_queryset(self):
+        return Scrap.objects.filter(user=self.request.user)
+
+
+class ScrapDetailView(generics.GenericAPIView):
+    """스크랩 추가/삭제"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, policy_id):  # [RENAME] plcy_no → policy_id
+        """스크랩 추가"""
+        policy = get_object_or_404(Policy, policy_id=policy_id)  # [RENAME] plcy_no → policy_id
+        scrap, created = Scrap.objects.get_or_create(user=request.user, policy=policy)
+
+        if created:
+            return Response({"message": "스크랩되었습니다."}, status=status.HTTP_201_CREATED)
+        return Response({"message": "이미 스크랩된 정책입니다."}, status=status.HTTP_200_OK)
+
+    def delete(self, request, policy_id):  # [RENAME] plcy_no → policy_id
+        """스크랩 삭제"""
+        policy = get_object_or_404(Policy, policy_id=policy_id)  # [RENAME] plcy_no → policy_id
+        deleted, _ = Scrap.objects.filter(user=request.user, policy=policy).delete()
+        
+        if deleted:
+            return Response({"message": "스크랩이 취소되었습니다."}, status=status.HTTP_200_OK)
+        return Response({"message": "스크랩되지 않은 정책입니다."}, status=status.HTTP_404_NOT_FOUND)
+
+
+class DeleteAccountView(APIView):
+    """
+    회원 탈퇴 API
+    DELETE /api/accounts/delete/
+    """
+    permission_classes = [IsAuthenticated, IsReauthenticated]
+
+    def delete(self, request):
+        user = request.user
+        password = request.data.get('password')
+
+        # 비밀번호가 있는 사용자(일반 가입자)인 경우 입력된 비밀번호 검증
+        if user.has_usable_password():
+            if not password:
+                return Response(
+                    {"error": "비밀번호를 입력해주세요."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if not user.check_password(password):
+                return Response(
+                    {"error": "비밀번호가 일치하지 않습니다."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # 비밀번호가 없는 사용자(소셜 로그인)는 VerifySocialView를 통해 발급받은
+        # reauth_token이 IsReauthenticated를 통해 검증된 상태임. 바로 탈퇴 진행.
+
+        token = request.headers.get('X-Reauth-Token')
+        if token:
+            blacklist_reauth_token(token)
+        user.delete()
+        return Response({"message": "회원탈퇴가 완료되었습니다."}, status=status.HTTP_200_OK)
+
+
+class VerifyPasswordView(APIView):
+    """
+    마이페이지 정보 수정/탈퇴 전 비밀번호 검증 및 재인증 토큰 발급
+    POST /api/accounts/verify-password/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        
+        if not user.has_usable_password():
+            return Response(
+                {"error": "비밀번호가 없는 계정입니다. 소셜 로그인 재인증을 진행하세요."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        password = request.data.get('password')
+        if not password:
+            return Response(
+                {"error": "비밀번호를 입력해주세요."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        if not user.check_password(password):
+            return Response(
+                {"error": "비밀번호가 일치하지 않습니다."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        signer = TimestampSigner()
+        token = signer.sign(str(user.id))
+        
+        return Response({
+            "message": "인증에 성공했습니다.",
+            "reauth_token": token
+        }, status=status.HTTP_200_OK)
+
+
+class VerifySocialView(APIView):
+    """
+    소셜 로그인 사용자용 재인증 토큰 발급 API
+    POST /api/accounts/verify-social/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        has_social = SocialAccount.objects.filter(user=user).exists()
+        if not has_social:
+            return Response(
+                {"error": "소셜 계정이 연결되어 있지 않습니다."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 소셜 로그인 계정이면 소셜 재인증 허용 (비밀번호 존재 여부와 무관)
+        signer = TimestampSigner()
+        token = signer.sign(str(user.id))
+        
+        return Response({
+            "message": "소셜 계정 인증에 성공했습니다.",
+            "reauth_token": token
+        }, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(APIView):
+    """
+    재인증 토큰 기반 비밀번호 변경
+    POST /api/accounts/password/change/
+    """
+    permission_classes = [IsAuthenticated, IsReauthenticated]
+
+    def post(self, request):
+        new_password1 = request.data.get('new_password1')
+        new_password2 = request.data.get('new_password2')
+
+        if not new_password1 or not new_password2:
+            return Response(
+                {"error": "새 비밀번호를 입력해주세요."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if new_password1 != new_password2:
+            return Response(
+                {"error": "새 비밀번호가 일치하지 않습니다."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            validate_password(new_password1, request.user)
+        except ValidationError as e:
+            return Response({"error": " ".join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        request.user.set_password(new_password1)
+        request.user.save()
+        update_session_auth_hash(request, request.user)
+
+        # 사용된 reauth 토큰 블랙리스트 등록 (재사용 방지)
+        token = request.headers.get('X-Reauth-Token')
+        if token:
+            blacklist_reauth_token(token)
+
+        return Response({"message": "비밀번호가 변경되었습니다."}, status=status.HTTP_200_OK)
+
+
+class DisabledPasswordChangeView(APIView):
+    """
+    구형 dj-rest-auth 비밀번호 변경 엔드포인트 차단용
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+
+# class CustomLoginView(TokenObtainPairView):
+#     """
+#     로그인 API (HttpOnly Cookie 설정)
+#     """
+#     def post(self, request, *args, **kwargs):
+#         response = super().post(request, *args, **kwargs)
+#         
+#         if response.status_code == 200:
+#             access_token = response.data.get('access')
+#             refresh_token = response.data.get('refresh')
+#             
+#             # 쿠키 설정
+#             response.set_cookie(
+#                 'access_token',
+#                 access_token,
+#                 httponly=True,
+#                 secure=False, 
+#                 samesite='Lax',
+#                 path='/',  # 명시적 경로 설정
+#                 max_age=60 * 60 * 1, # 1시간
+#             )
+#             response.set_cookie(
+#                 'refresh_token',
+#                 refresh_token,
+#                 httponly=True,
+#                 secure=False,
+#                 samesite='Lax',
+#                 path='/',
+#                 max_age=60 * 60 * 24 * 1, # 1일
+#             )
+#             
+#             # 바디에서 토큰 제거
+#             if 'access' in response.data:
+#                 del response.data['access']
+#             if 'refresh' in response.data:
+#                 del response.data['refresh']
+#             
+#         return response
+# 
+# 
+# class CustomRefreshView(TokenRefreshView):
+#     """
+#     토큰 갱신 API (Cookie에서 Refresh Token 읽기)
+#     """
+#     def post(self, request, *args, **kwargs):
+#         # 쿠키에서 refresh token을 꺼내 data에 주입
+#         if 'refresh' not in request.data:
+#             refresh_token = request.COOKIES.get('refresh_token')
+#             if refresh_token:
+#                 request.data['refresh'] = refresh_token
+#         
+#         try:
+#             response = super().post(request, *args, **kwargs)
+#         except InvalidToken:
+#             return Response({"detail": "Invalid refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+#         
+#         if response.status_code == 200:
+#             access_token = response.data.get('access')
+#             
+#             # Access Token 쿠키 갱신
+#             response.set_cookie(
+#                 'access_token',
+#                 access_token,
+#                 httponly=True,
+#                 secure=False,
+#                 samesite='Lax',
+#                 path='/',
+#                 max_age=60 * 60 * 1,
+#             )
+#             
+#             # Refresh Token Rotation이 켜져있다면 Refresh Token도 갱신될 수 있음
+#             if 'refresh' in response.data:
+#                 refresh_token = response.data.get('refresh')
+#                 response.set_cookie(
+#                     'refresh_token',
+#                     refresh_token,
+#                     httponly=True,
+#                     secure=False,
+#                     samesite='Lax',
+#                     path='/',
+#                     max_age=60 * 60 * 24 * 1,
+#                 )
+#                 del response.data['refresh']
+#             
+#             if 'access' in response.data:
+#                 del response.data['access']
+#             
+#         return response
+# 
+# 
+# class LogoutView(generics.GenericAPIView):
+#     """
+#     로그아웃 API (쿠키 삭제)
+#     """
+#     permission_classes = [AllowAny]
+# 
+#     def post(self, request):
+#         response = Response({"message": "로그아웃 되었습니다."}, status=status.HTTP_200_OK)
+#         # set_cookie와 동일한 path, samesite 설정으로 삭제
+#         response.delete_cookie('access_token', path='/', samesite='Lax')
+#         response.delete_cookie('refresh_token', path='/', samesite='Lax')
+#         return response
+
+
+
+def verify_recaptcha(token):
+    """Google reCAPTCHA v2 검증"""
+    secret_key = os.environ.get('RECAPTCHA_SECRET_KEY')
+    # [보안] 운영 환경(DEBUG=False)에서는 키 누락 시 무조건 차단
+    if not secret_key:
+        if not settings.DEBUG:
+            logger.error("RECAPTCHA_SECRET_KEY가 설정되지 않았습니다. 운영 환경에서는 필수입니다.")
+            return False
+        return True  # 개발 환경에서만 패스
+        
+    if not token:
+        return False
+        
+    data = {
+        'secret': secret_key,
+        'response': token
+    }
+    try:
+        response = requests.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            data=data,
+            timeout=5,  # [보안] 구글 API 지연 시 스레드 행(hang) 방지
+        )
+        result = response.json()
+        return result.get('success', False)
+    except requests.exceptions.Timeout:
+        logger.warning("reCAPTCHA 검증 API 타임아웃 발생")
+        return False
+    except Exception:
+        return False
+
+class CustomPasswordResetView(PasswordResetView):
+    """
+    비밀번호 재설정 API (reCAPTCHA + User Enumeration 방지)
+    """
+    def post(self, request, *args, **kwargs):
+        # 0. reCAPTCHA 검증
+        token = request.data.get('recaptchaToken')
+        if not verify_recaptcha(token):
+            return Response({"error": "로봇이 아님을 증명해주세요."}, status=status.HTTP_400_BAD_REQUEST)
+
+        email = request.data.get('email')
+        
+        # [보안] User Enumeration 방지: 이메일 존재 여부와 무관하게 동일한 200 응답 반환
+        if not get_user_model().objects.filter(email=email).exists():
+            logger.info("비밀번호 재설정 요청 - 미가입 이메일")
+            return Response(
+                {"detail": "입력하신 이메일이 가입된 계정이라면, 비밀번호 재설정 링크를 발송했습니다."},
+                status=status.HTTP_200_OK
+            )
+            
+        return super().post(request, *args, **kwargs)
+
+
+logger = logging.getLogger(__name__)
+
+class FindUsernameView(APIView):
+    """
+    아이디 찾기 API (reCAPTCHA + User Enumeration 방지)
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        # 0. reCAPTCHA 검증
+        token = request.data.get('recaptchaToken')
+        if not verify_recaptcha(token):
+            return Response({"error": "로봇이 아님을 증명해주세요."}, status=status.HTTP_400_BAD_REQUEST)
+
+        email = request.data.get('email')
+        
+        if not email:
+            return Response({"error": "이메일을 입력해주세요."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # [보안] User Enumeration 방지: 가입 여부와 관계없이 동일한 응답 반환
+        # 실제 발송은 가입자에게만 처리
+        UNIFIED_MESSAGE = "입력하신 이메일이 가입된 계정이라면, 아이디 정보를 발송했습니다."
+
+        users = get_user_model().objects.filter(email=email)
+        
+        if not users.exists():
+            logger.info("아이디 찾기 요청 - 미가입 이메일")
+            return Response(
+                {"message": UNIFIED_MESSAGE},
+                status=status.HTTP_200_OK
+            )
+
+        # 유저가 존재하면 이메일 발송
+        user = users.first()
+        subject = "[복지나침반] 아이디 찾기 결과입니다."
+        message = f"회원님의 아이디는 '{user.username}' 입니다."
+        
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                fail_silently=False,
+            )
+            # 이메일 마스킹 로직
+            masked_email = email
+            if '@' in email:
+                local, domain = email.split('@')
+                if len(local) > 3:
+                    masked_email = f"{local[:3]}***@{domain}"
+                else:
+                    masked_email = f"{local}***@{domain}"
+            
+            logger.info(f"아이디 찾기 이메일 발송 성공: {masked_email}")
+
+        except Exception as e:
+            logger.error(f"이메일 발송 실패: {e}")
+            pass
+        
+        return Response(
+            {"message": UNIFIED_MESSAGE},
+            status=status.HTTP_200_OK
+        )
+
+
+class PasswordResetConfirmRedirectView(APIView):
+    """
+    비밀번호 재설정 이메일 링크 클릭 시 프론트엔드로 리다이렉트
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, uidb64, token):
+        # settings.FRONTEND_URL이 없으면 기본값 사용
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        redirect_url = f"{frontend_url}/auth/password-reset/confirm/{uidb64}/{token}"
+        return HttpResponseRedirect(redirect_url)

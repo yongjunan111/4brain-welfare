@@ -1,0 +1,106 @@
+# 환경변수: .env (base) + .env.docker (Docker override). cp .env.example .env 후 키값 채우기
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:15
+    container_name: welfare_db
+    env_file: [.env, .env.docker]
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    networks:
+      - welfare-net
+
+  # ---------------------------------------------------------------------------
+  # Django Backend
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: welfare_backend
+    env_file: [.env, .env.docker]
+    ports:
+      - "8000:8000"
+    working_dir: /app/backend
+    volumes:
+      - ./backend:/app/backend
+      - ./llm:/app/llm
+      - ./data/raw:/app/data/raw
+      - ./data/chroma_db:/app/data/chroma_db
+      - backend_static:/app/backend/staticfiles
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - welfare-net
+
+  # ---------------------------------------------------------------------------
+  # MCP Server (SSE)
+  # GPU: docker compose -f docker-compose.yaml -f docker-compose.gpu.yml up
+  # ---------------------------------------------------------------------------
+  mcp:
+    build:
+      context: .
+      dockerfile: llm/Dockerfile
+    container_name: welfare_mcp
+    env_file: [.env, .env.docker]
+    ports:
+      - "8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data/chroma_db:/app/data/chroma_db
+      - ./data/raw:/app/data/raw
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('localhost',8001),2); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - welfare-net
+
+  # ---------------------------------------------------------------------------
+  # Frontend (Next.js) — Dockerfile은 프론트팀이 작성
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: welfare_frontend
+    env_file: [.env, .env.docker]
+    environment:
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - welfare-net
+    profiles:
+      - with-frontend  # 프론트 Dockerfile 준비 전까지 기본 실행에서 제외
+
+volumes:
+  postgres_data:
+  backend_static:
+
+networks:
+  welfare-net:
+    driver: bridge
